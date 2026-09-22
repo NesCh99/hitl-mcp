@@ -92,6 +92,33 @@ export class FakeChannelAdapter implements ChannelAdapter {
   }
 
   /**
+   * Most recently sent outbound message, if any.
+   * Useful in tests to correlate a simulated human reply.
+   */
+  getLastSentMessage(): SentMessage | undefined {
+    return this.sent.at(-1);
+  }
+
+  /**
+   * Simulate a human reply to the most recently sent message.
+   * Same delivery path as simulateReply — mirrors replying to the latest question.
+   */
+  simulateReplyToLast(text: string, senderId?: string): IncomingMessage {
+    const outbound = this.getLastSentMessage();
+    if (!outbound) {
+      throw new HitlError(
+        "CORRELATION_FAILURE",
+        "No outbound messages to reply to.",
+      );
+    }
+    return this.simulateReply({
+      replyToMessageId: outbound.messageId,
+      text,
+      senderId,
+    });
+  }
+
+  /**
    * Simulate a human reply to a previously sent message.
    * Sets replyToMessageId so core correlation can resolve the pending request.
    */

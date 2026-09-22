@@ -400,10 +400,14 @@ describe("FakeChannelAdapter", () => {
 
     const sent = await fake.sendMessage("a", "hello");
     fake.simulateReply({ replyToMessageId: sent.messageId, text: "hi back" });
+
+    await fake.sendMessage("a", "follow-up");
+    fake.simulateReplyToLast("reply to last");
+
     fake.simulateUnrelatedMessage({ targetId: "a", text: "noise" });
 
-    expect(fake.sent).toHaveLength(1);
-    expect(received).toEqual(["hi back", "noise"]);
+    expect(fake.sent).toHaveLength(2);
+    expect(received).toEqual(["hi back", "reply to last", "noise"]);
 
     const targets = await fake.listTargets();
     expect(targets.map((t) => t.targetId)).toEqual(["a", "b"]);
