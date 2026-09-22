@@ -1,9 +1,9 @@
-import type { ChannelAdapter, MessageHandler } from "../channel-adapter.js";
 import type {
-  ChannelType,
-  SentMessage,
-  Target,
-} from "../../core/types.js";
+  ChannelAdapter,
+  ListedTarget,
+  MessageHandler,
+} from "../channel-adapter.js";
+import type { ChannelType, SentMessage } from "../../core/types.js";
 import { HitlError } from "../../core/types.js";
 
 /**
@@ -40,7 +40,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
     // no-op until implemented
   }
 
-  async listTargets(): Promise<Target[]> {
+  async listTargets(): Promise<ListedTarget[]> {
     return [];
   }
 

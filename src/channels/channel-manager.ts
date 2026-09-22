@@ -34,4 +34,16 @@ export class ChannelManager {
   listTypes(): ChannelType[] {
     return [...this.adapters.keys()];
   }
+
+  async disconnectAll(): Promise<void> {
+    await Promise.all(
+      this.listAdapters().map(async (adapter) => {
+        try {
+          await adapter.disconnect();
+        } catch {
+          // Best-effort shutdown; do not block process exit.
+        }
+      }),
+    );
+  }
 }

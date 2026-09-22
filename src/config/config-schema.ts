@@ -10,6 +10,9 @@ export const TargetSchema = z.object({
 export const SlackConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
+    /** Non-secret Slack preferences only. Tokens live in CredentialStore. */
+    teamId: z.string().optional(),
+    teamName: z.string().optional(),
   })
   .passthrough();
 

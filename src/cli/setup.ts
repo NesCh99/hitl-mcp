@@ -3,8 +3,10 @@ import { stdin as input, stdout as output } from "node:process";
 import type { ChannelManager } from "../channels/channel-manager.js";
 import type { ConfigManager } from "../config/config-manager.js";
 import type { CredentialStore } from "../auth/credential-store.js";
-import type { ChannelType, Target } from "../core/types.js";
+import type { ChannelType } from "../core/types.js";
+import type { ListedTarget } from "../channels/channel-adapter.js";
 import type { HitlConfig } from "../config/config-schema.js";
+import { SlackCredentialsSchema } from "../channels/slack/slack-auth.js";
 
 export interface SetupDeps {
   configManager: ConfigManager;
@@ -14,6 +16,7 @@ export interface SetupDeps {
 
 /**
  * Interactive local setup. No HITL account, email, or password.
+ * Provider-specific credential collection stays here; adapters only validate.
  */
 export async function runSetup(deps: SetupDeps): Promise<void> {
   const rl = readline.createInterface({ input, output });
@@ -48,13 +51,19 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
     const channel = available[index]!;
     const adapter = deps.channelManager.getAdapter(channel);
 
+    try {
+      await collectAndStoreCredentials(channel, rl, deps.credentialStore);
+    } catch (error) {
+      console.error(
+        `Credential setup failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     console.log(`\nAuthenticating ${labelFor(channel)}...`);
     try {
       await adapter.authenticate();
-      // Mark provider as configured in credential store (opaque flag for MVP fake).
-      await deps.credentialStore.set(channel, {
-        authenticatedAt: new Date().toISOString(),
-      });
       console.log("Authentication successful.\n");
     } catch (error) {
       console.error(
@@ -67,7 +76,9 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
     await adapter.connect();
     const targets = await adapter.listTargets();
     if (targets.length === 0) {
-      console.error("No targets discovered for this channel.");
+      console.error(
+        "No targets discovered. For Slack, invite the bot to the channels you want to use, then re-run setup.",
+      );
       process.exitCode = 1;
       return;
     }
@@ -90,7 +101,12 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
       return;
     }
 
-    const defaultTarget = targets[targetIndex]!;
+    const selected = targets[targetIndex]!;
+    const defaultTarget = {
+      channel: selected.channel,
+      targetId: selected.targetId,
+    };
+
     const config = await deps.configManager.load();
     const next: HitlConfig = {
       ...config,
@@ -105,13 +121,76 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
     };
 
     await deps.configManager.save(next);
+
+    // Setup connected adapters for discovery; disconnect before exiting.
+    await adapter.disconnect();
+
     console.log("\nDefault target saved.");
     console.log(`  channel:  ${defaultTarget.channel}`);
     console.log(`  targetId: ${defaultTarget.targetId}`);
+    if (selected.label) {
+      console.log(`  label:    ${selected.label}`);
+    }
     console.log(`  config:   ${deps.configManager.getPath()}`);
     console.log("\nSetup complete. Point your MCP client at `hitl-mcp` (stdio).");
   } finally {
     rl.close();
+  }
+}
+
+async function collectAndStoreCredentials(
+  channel: ChannelType,
+  rl: readline.Interface,
+  credentialStore: CredentialStore,
+): Promise<void> {
+  switch (channel) {
+    case "fake":
+      await credentialStore.set("fake", {
+        authenticatedAt: new Date().toISOString(),
+      });
+      return;
+
+    case "slack": {
+      console.log(`
+Slack setup
+-----------
+Create a Slack App in your workspace with Socket Mode enabled.
+You will need:
+  • Bot User OAuth Token (xoxb-...)
+  • App-Level Token (xapp-...) with connections:write
+
+Tokens are stored locally under ~/.hitl-mcp/credentials/ and are never
+sent to any HITL server.
+
+Recommended bot scopes: chat:write, channels:read, groups:read,
+channels:history, groups:history
+
+Subscribe to bot events: message.channels, message.groups
+
+Invite the bot to any channel you want to use as a HITL target.
+`);
+
+      const botToken = (await rl.question("Bot token (xoxb-...): ")).trim();
+      const appToken = (
+        await rl.question("App-level token (xapp-...): ")
+      ).trim();
+
+      const parsed = SlackCredentialsSchema.safeParse({ botToken, appToken });
+      if (!parsed.success) {
+        throw new Error(parsed.error.issues.map((i) => i.message).join("; "));
+      }
+
+      await credentialStore.set("slack", parsed.data);
+      return;
+    }
+
+    case "whatsapp":
+      throw new Error(
+        "WhatsApp setup is not implemented yet. Choose Slack or Fake.",
+      );
+
+    default:
+      throw new Error(`Unsupported channel: ${channel}`);
   }
 }
 
@@ -128,6 +207,6 @@ function labelFor(type: ChannelType): string {
   }
 }
 
-function formatTarget(target: Target): string {
-  return `${target.targetId}`;
+function formatTarget(target: ListedTarget): string {
+  return target.label ?? target.targetId;
 }

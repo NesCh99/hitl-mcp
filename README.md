@@ -37,7 +37,7 @@ Nothing about the interaction is stored by HITL.
 | Principle | Meaning |
 |---|---|
 | Local-first | The MCP runs on your machine |
-| stdio MVP | No HTTP server for the MVP |
+| stdio MVP | No HTTP server for event delivery |
 | No central backend | No HITL cloud, no shared gateway |
 | No HITL account | No email, password, or centralized identity |
 | No task database | Agents keep their own state |
@@ -67,6 +67,8 @@ Send a question and wait for a human reply.
 
 `target` is optional. Without it, the configured default target is used. An override never modifies the saved default.
 
+For Slack, reply **in the thread** of the bot’s question.
+
 ### `notify_human`
 
 One-way notification. No pending request. No wait.
@@ -85,7 +87,7 @@ One-way notification. No pending request. No wait.
 npm install
 npm run build
 
-# Configure a default channel + target (fake channel for MVP)
+# Configure Slack (or Fake for local testing)
 npm run setup
 # or: node dist/index.js setup
 
@@ -93,7 +95,17 @@ npm run setup
 npm start
 ```
 
-### MCP client config (example)
+### Slack (Socket Mode)
+
+1. Create a Slack App with Socket Mode enabled
+2. Add bot scopes and `message.channels` / `message.groups` events
+3. Install the app, copy `xoxb-` and `xapp-` tokens
+4. Invite the bot to your HITL channel
+5. Run `hitl-mcp setup` → choose Slack
+
+Full walkthrough: [docs/slack.md](docs/slack.md)
+
+### MCP client config (Cursor example)
 
 ```json
 {
@@ -108,18 +120,13 @@ npm start
 
 ---
 
-## MVP status
+## Status
 
-The first milestone is **core + FakeChannelAdapter**:
-
-- MCP stdio server
-- `ask_human` / `notify_human`
-- In-memory pending requests + reply correlation
-- Local config + credential store
-- `hitl-mcp setup`
-- Tests without external providers
-
-Slack (Socket Mode) and WhatsApp adapters are scaffolded under `src/channels/` and are the next implementation milestone.
+| Channel | Status |
+|---|---|
+| Fake | Working (tests / local dev) |
+| Slack (Socket Mode) | Working |
+| WhatsApp | Scaffold only |
 
 ---
 
@@ -128,12 +135,13 @@ Slack (Socket Mode) and WhatsApp adapters are scaffolded under `src/channels/` a
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [Channels](docs/channels.md)
+- [Slack setup](docs/slack.md)
 
 ---
 
-## Non-goals (MVP)
+## Non-goals
 
-No task management, databases, REST API, HTTP server, web dashboard, user accounts, analytics, billing, cloud sync, conversation history, or agent orchestration.
+No task management, databases, REST API, HTTP server for Slack events, web dashboard, user accounts, analytics, billing, cloud sync, conversation history, or agent orchestration.
 
 ---
 

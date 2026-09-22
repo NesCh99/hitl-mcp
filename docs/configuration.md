@@ -6,13 +6,11 @@ HITL persists only **user preferences** and **provider credentials**. It never p
 
 Path: `~/.hitl-mcp/config.json`
 
-Example:
-
 ```json
 {
   "defaultTarget": {
-    "channel": "fake",
-    "targetId": "local-hitl"
+    "channel": "slack",
+    "targetId": "C123456789"
   },
   "channels": {
     "fake": {
@@ -23,7 +21,7 @@ Example:
       ]
     },
     "slack": {
-      "enabled": false
+      "enabled": true
     },
     "whatsapp": {
       "enabled": false
@@ -50,13 +48,15 @@ Or:
 ```json
 {
   "defaultTarget": {
-    "channel": "whatsapp",
-    "targetId": "Local HITL"
+    "channel": "fake",
+    "targetId": "local-hitl"
   }
 }
 ```
 
-The meaning of `targetId` is owned by the adapter.
+The meaning of `targetId` is owned by the adapter. For Slack it is the channel ID (e.g. `C…`).
+
+For Slack App creation, Socket Mode, and required tokens, see [slack.md](./slack.md).
 
 ### Runtime override
 

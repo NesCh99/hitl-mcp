@@ -9,81 +9,56 @@ interface ChannelAdapter {
   isAuthenticated(): Promise<boolean>;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  listTargets(): Promise<Target[]>;
+  listTargets(): Promise<ListedTarget[]>;
   sendMessage(targetId: string, message: string): Promise<SentMessage>;
   onMessage(handler: (message: IncomingMessage) => void): void;
 }
 ```
 
+`ListedTarget` extends `Target` with an optional `label` for setup UIs. Core routing still uses only `{ channel, targetId }`.
+
 `ChannelManager` registers adapters and routes by `ChannelType`. It does not own tasks, persistence, or pending-request state.
 
-## Fake (MVP)
+## Fake
 
-`FakeChannelAdapter` exists only for development and testing.
-
-It simulates:
-
-- send message
-- receive human response
-- message IDs
-- reply relationships (`replyToMessageId`)
-- multiple targets
-
-All core integration tests use this adapter. No external network is required.
-
-Enable via setup (currently the only fully working provider):
+`FakeChannelAdapter` exists for development and testing. Core tests use it exclusively (no network).
 
 ```bash
 hitl-mcp setup
 # choose Fake (development / testing)
 ```
 
-## Slack (scaffold)
+## Slack (Socket Mode)
 
 Location: `src/channels/slack/`
 
-Planned MVP behavior for Slack:
+Working end-to-end:
 
-- User configures **their own** Slack App (no centralized HITL bot)
-- Local **Socket Mode** connection (no public HTTP endpoint)
-- Adapter maps Slack events → `IncomingMessage`
-- Thread / reply relationship (`thread_ts`) becomes `replyToMessageId`
-- Slack channel IDs become `targetId`
+- User’s own Slack App (no centralized HITL bot)
+- Local Socket Mode via `@slack/socket-mode` + `@slack/web-api`
+- Target discovery for public/private channels the bot has joined
+- `ts` → `messageId`, `thread_ts` → `replyToMessageId`
+- Credentials via existing `CredentialStore`
 
-Files:
+See the full guide: [slack.md](./slack.md)
 
 | File | Role |
 |---|---|
-| `slack-adapter.ts` | Adapter implementation (scaffold) |
-| `slack-auth.ts` | App / token authentication |
-| `slack-events.ts` | Event → `IncomingMessage` mapping |
+| `slack-adapter.ts` | Socket Mode adapter |
+| `slack-auth.ts` | Credential schema + redaction |
+| `slack-events.ts` | Event → `IncomingMessage` |
+| `types.ts` | Injected client interfaces for tests |
 
 ## WhatsApp (scaffold)
 
 Location: `src/channels/whatsapp/`
 
-Planned behavior:
-
-- Authenticate the user's own WhatsApp account / local session
-- Discover chats/groups as targets
-- Send / receive messages
-- Map quote/reply relationships when available
-- **Do not** store WhatsApp message history
-
-Files:
-
-| File | Role |
-|---|---|
-| `whatsapp-adapter.ts` | Adapter implementation (scaffold) |
-| `whatsapp-auth.ts` | Local session authentication |
-| `whatsapp-events.ts` | Event → `IncomingMessage` mapping |
+Not registered in the running app yet. Planned later: local session auth, targets, send/receive — without storing message history.
 
 ## Adding a new channel later
 
 1. Implement `ChannelAdapter` under `src/channels/<name>/`
-2. Keep all provider-specific IDs and events inside the adapter
-3. Register the adapter with `ChannelManager`
-4. Extend `ChannelType` / config schema
+2. Keep provider-specific IDs and events inside the adapter
+3. Register with `ChannelManager` in `createApp`
+4. Extend setup credential collection if needed
 5. Do not teach HITL core about the provider
-
-Discord, Telegram, Teams, email, etc. are intentionally out of scope for the MVP.

@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import type {
   MessageHandler,
   ChannelAdapter,
+  ListedTarget,
 } from "../channel-adapter.js";
 import type {
   ChannelType,
   IncomingMessage,
   SentMessage,
-  Target,
 } from "../../core/types.js";
 import { HitlError } from "../../core/types.js";
 
@@ -58,10 +58,11 @@ export class FakeChannelAdapter implements ChannelAdapter {
     this.connected = false;
   }
 
-  async listTargets(): Promise<Target[]> {
+  async listTargets(): Promise<ListedTarget[]> {
     return this.targets.map((t) => ({
       channel: this.type,
       targetId: t.targetId,
+      label: t.label ?? t.targetId,
     }));
   }
 

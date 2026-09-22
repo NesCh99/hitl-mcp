@@ -8,12 +8,13 @@ async function main(): Promise<void> {
   const command = args[0];
 
   if (command === "setup") {
-    const app = await createApp({ fakeOnly: true });
+    const app = await createApp();
     await runSetup({
       configManager: app.configManager,
       channelManager: app.channelManager,
       credentialStore: app.credentialStore,
     });
+    await app.channelManager.disconnectAll();
     return;
   }
 
@@ -27,12 +28,24 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Default: start MCP server on stdio.
-  // Real Slack/WhatsApp adapters are registered but not yet functional;
-  // setup currently uses the fake channel for the MVP milestone.
-  const app = await createApp({ fakeOnly: true });
+  const app = await createApp();
   await app.loadConfig();
   app.hitl.startListening();
+
+  const shutdown = async () => {
+    await app.channelManager.disconnectAll();
+  };
+
+  process.once("SIGINT", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
+  process.once("SIGTERM", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
+  process.once("beforeExit", () => {
+    void shutdown();
+  });
+
   await startMcpServer(app.hitl);
 }
 
