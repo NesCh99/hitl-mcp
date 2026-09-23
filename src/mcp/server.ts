@@ -5,11 +5,23 @@ import { z } from "zod";
 import type { HitlManager } from "../core/hitl-manager.js";
 import { askHuman, AskHumanArgsSchema } from "./tools/ask-human.js";
 import { notifyHuman, NotifyHumanArgsSchema } from "./tools/notify-human.js";
+import { resolveSession } from "./session.js";
+
+const TargetShape = z
+  .object({
+    channel: z.enum(["fake", "slack", "whatsapp"]),
+    targetId: z.string(),
+  })
+  .optional()
+  .describe("Optional per-call target override; does not change the saved default");
+
+const LabelShape = z
+  .string()
+  .optional()
+  .describe("Optional short label for the channel thread opener (e.g. task title)");
 
 /**
- * MCP stdio server. One process may host one stdio connection for the MVP.
- * connectionId scopes pending requests so future multi-connection hosts
- * can isolate ask_human promises correctly.
+ * MCP stdio server — progress notifications + short channel questions.
  */
 export async function startMcpServer(hitl: HitlManager): Promise<void> {
   const connectionId = randomUUID();
@@ -20,46 +32,49 @@ export async function startMcpServer(hitl: HitlManager): Promise<void> {
   });
 
   server.tool(
-    "ask_human",
-    "Send a question to the human via their configured communication channel and wait for a reply. Uses the default target unless an explicit target override is provided. Nothing is persisted.",
+    "notify_human",
+    "One-way progress update (start, milestones, done). Also use when something important needs a reply in the host chat. Does not wait for a reply.",
     {
-      question: z.string().describe("The question to ask the human"),
-      target: z
-        .object({
-          channel: z.enum(["fake", "slack", "whatsapp"]),
-          targetId: z.string(),
-        })
-        .optional()
-        .describe("Optional per-call target override; does not change the saved default"),
+      message: z.string().describe("The notification message"),
+      label: LabelShape,
+      target: TargetShape,
+    },
+    async (args, extra) => {
+      const parsed = NotifyHumanArgsSchema.parse(args);
+      const session = resolveSession({
+        connectionId,
+        label: parsed.label,
+        transportSessionId: extra.sessionId,
+      });
+      return notifyHuman(hitl, parsed, { id: session.id, name: session.name });
+    },
+  );
+
+  server.tool(
+    "ask_human",
+    "Ask a short question and wait for a brief channel reply (yes/no, A/B, one line). For long or important decisions, use notify_human and continue in the host chat.",
+    {
+      question: z.string().describe("A short question expecting a brief channel reply"),
+      label: LabelShape,
+      target: TargetShape,
       timeoutMs: z
         .number()
         .int()
         .positive()
         .optional()
-        .describe("Optional timeout in milliseconds (default: 5 minutes)"),
+        .describe("Optional HITL-side deadline. Omit to wait until the human replies."),
     },
-    async (args) => {
+    async (args, extra) => {
       const parsed = AskHumanArgsSchema.parse(args);
-      return askHuman(hitl, connectionId, parsed);
-    },
-  );
-
-  server.tool(
-    "notify_human",
-    "Send a one-way notification to the human. Does not wait for a response. Nothing is persisted.",
-    {
-      message: z.string().describe("The notification message"),
-      target: z
-        .object({
-          channel: z.enum(["fake", "slack", "whatsapp"]),
-          targetId: z.string(),
-        })
-        .optional()
-        .describe("Optional per-call target override; does not change the saved default"),
-    },
-    async (args) => {
-      const parsed = NotifyHumanArgsSchema.parse(args);
-      return notifyHuman(hitl, parsed);
+      const session = resolveSession({
+        connectionId,
+        label: parsed.label,
+        transportSessionId: extra.sessionId,
+      });
+      return askHuman(hitl, connectionId, parsed, {
+        id: session.id,
+        name: session.name,
+      });
     },
   );
 

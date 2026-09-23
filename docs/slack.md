@@ -71,7 +71,7 @@ npm run setup
 
 Credentials are stored locally under `~/.hitl-mcp/credentials/` (separate from `config.json`). They are never sent to a HITL server and must not be committed to git.
 
-## Connect an MCP client (Cursor example)
+## Connect an MCP client
 
 ```json
 {
@@ -88,25 +88,32 @@ Start the server with `npm start` (or let the MCP client launch the command abov
 
 ## How replies work
 
-1. `ask_human` posts a root message in the target channel
-2. Reply **in that message’s thread** in Slack
-3. The adapter maps Slack `thread_ts` → `replyToMessageId`
-4. HITL core resolves the matching in-memory pending request
-5. The pending request is removed from memory
+HITL uses **one Slack thread per MCP connection** (or host-provided transport session when available):
 
-Unrelated channel messages (not thread replies) do not resolve pending questions.
+1. First `ask_human` / `notify_human` posts a root message:
+   `Started working on {label || id}`
+2. Later messages stay **in that thread**
+3. Reply **in the thread** in Slack
+4. The adapter maps Slack `thread_ts` → `replyToMessageId` (= thread root)
+5. HITL resolves the matching in-memory pending request (FIFO if several asks wait in the same thread)
+6. The pending request is removed from memory
+
+Optional `label` is only a display title for the opener.
+
+Unrelated channel messages (not in the thread) do not resolve pending questions.
 
 ## Tool examples
 
-### ask_human (default target)
+### ask_human
 
 ```json
 {
-  "question": "Should I create branch feature/x?"
+  "question": "Should I create branch feature/x?",
+  "label": "Feature X"
 }
 ```
 
-### ask_human (per-call override)
+### ask_human (per-call target override)
 
 ```json
 {
@@ -124,9 +131,12 @@ The override does not change the saved default target.
 
 ```json
 {
-  "message": "Deploy to staging finished successfully."
+  "message": "Deploy to staging finished successfully.",
+  "label": "Feature X"
 }
 ```
+
+Posts into the same thread (creates the opener first if needed).
 
 ## Troubleshooting
 
@@ -134,7 +144,7 @@ The override does not change the saved default target.
 |---|---|
 | No targets in setup | Invite the bot to channels; confirm `channels:read` / `groups:read` |
 | Messages not received | Event subscriptions + `channels:history` / `groups:history`; Socket Mode on |
-| `ask_human` times out | Reply **in the thread** of the bot’s question |
+| `ask_human` times out | Reply **in the thread** (not a new top-level message) |
 | Auth errors | Re-run setup; regenerate tokens if revoked |
 
 ## Security

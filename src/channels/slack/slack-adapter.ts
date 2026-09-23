@@ -4,7 +4,9 @@ import type { CredentialStore } from "../../auth/credential-store.js";
 import { HitlError } from "../../core/types.js";
 import type {
   ChannelType,
+  SendMessageOptions,
   SentMessage,
+  SessionRef,
 } from "../../core/types.js";
 import type {
   ChannelAdapter,
@@ -32,6 +34,14 @@ export interface SlackAdapterOptions {
   createSocketClient?: CreateSocketClient;
 }
 
+interface SlackSessionThread {
+  targetId: string;
+  sessionId: string;
+  /** Root message ts — all replies in this thread use thread_ts = rootTs. */
+  rootTs: string;
+  label: string;
+}
+
 function defaultCreateWebClient(botToken: string): SlackWebApi {
   return new WebClient(botToken, { logLevel: LogLevel.ERROR }) as unknown as SlackWebApi;
 }
@@ -44,14 +54,27 @@ function defaultCreateSocketClient(appToken: string): SlackSocketClient {
   }) as unknown as SlackSocketClient;
 }
 
+function sessionKey(targetId: string, sessionId: string): string {
+  return `${targetId}::${sessionId}`;
+}
+
+function sessionLabel(session: SessionRef): string {
+  const name = session.name?.trim();
+  if (name) {
+    return name;
+  }
+  return session.id;
+}
+
 /**
  * Slack ChannelAdapter using Socket Mode.
  *
- * All Slack-specific behavior stays here: tokens, Socket Mode, channel IDs,
- * `ts` / `thread_ts` correlation, and event mapping into IncomingMessage.
+ * One MCP connection (`session`) → one Slack thread in the target channel:
+ * 1. First message opens a root: "Started working on {name|id}"
+ * 2. ask_human / notify_human posts go into that thread
+ * 3. Human replies in the thread; thread_ts correlates to the session root
  *
- * Humans should reply **in the thread** of the ask_human question so
- * `thread_ts` can resolve the pending request.
+ * Concurrent sessions → concurrent threads in the same channel.
  */
 export class SlackAdapter implements ChannelAdapter {
   readonly type: ChannelType = "slack";
@@ -61,6 +84,10 @@ export class SlackAdapter implements ChannelAdapter {
   private readonly createSocketClient: CreateSocketClient;
 
   private readonly handlers: MessageHandler[] = [];
+  /** In-memory only — session threads disappear when the process exits. */
+  private readonly sessions = new Map<string, SlackSessionThread>();
+  private readonly sessionLocks = new Map<string, Promise<SlackSessionThread>>();
+
   private credentials: SlackCredentials | undefined;
   private web: SlackWebApi | undefined;
   private socket: SlackSocketClient | undefined;
@@ -159,6 +186,8 @@ export class SlackAdapter implements ChannelAdapter {
     const socket = this.socket;
     this.socket = undefined;
     this.connected = false;
+    this.sessions.clear();
+    this.sessionLocks.clear();
 
     if (socket) {
       try {
@@ -204,7 +233,6 @@ export class SlackAdapter implements ChannelAdapter {
         if (!channel.id || channel.is_archived) {
           continue;
         }
-        // Only destinations the bot can actually use.
         if (!channel.is_member) {
           continue;
         }
@@ -225,15 +253,103 @@ export class SlackAdapter implements ChannelAdapter {
     return targets;
   }
 
-  async sendMessage(targetId: string, message: string): Promise<SentMessage> {
+  async sendMessage(
+    targetId: string,
+    message: string,
+    options?: SendMessageOptions,
+  ): Promise<SentMessage> {
     await this.connect();
+
+    const session = options?.session;
+    if (!session?.id) {
+      throw new HitlError(
+        "INVALID_TARGET",
+        "Slack requires a session id so messages can share a thread.",
+      );
+    }
+
+    const thread = await this.ensureSessionThread(targetId, session);
+    const result = await this.post(targetId, message, thread.rootTs);
+
+    return {
+      messageId: result.ts!,
+      // Replies in this Slack thread have thread_ts = rootTs.
+      correlationId: thread.rootTs,
+      target: { channel: "slack", targetId: result.channel ?? targetId },
+      text: message,
+    };
+  }
+
+  onMessage(handler: MessageHandler): void {
+    this.handlers.push(handler);
+  }
+
+  /** Test helper: inspect in-memory session threads. */
+  getSessionThread(targetId: string, sessionId: string): SlackSessionThread | undefined {
+    return this.sessions.get(sessionKey(targetId, sessionId));
+  }
+
+  private async ensureSessionThread(
+    targetId: string,
+    session: SessionRef,
+  ): Promise<SlackSessionThread> {
+    const key = sessionKey(targetId, session.id);
+    const existing = this.sessions.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const inFlight = this.sessionLocks.get(key);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const create = this.openSessionThread(targetId, session, key);
+    this.sessionLocks.set(key, create);
+    try {
+      return await create;
+    } finally {
+      this.sessionLocks.delete(key);
+    }
+  }
+
+  private async openSessionThread(
+    targetId: string,
+    session: SessionRef,
+    key: string,
+  ): Promise<SlackSessionThread> {
+    const existing = this.sessions.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const label = sessionLabel(session);
+    const opener = `Started working on ${label}`;
+    const result = await this.post(targetId, opener);
+
+    const thread: SlackSessionThread = {
+      targetId,
+      sessionId: session.id,
+      rootTs: result.ts!,
+      label,
+    };
+    this.sessions.set(key, thread);
+    return thread;
+  }
+
+  private async post(
+    targetId: string,
+    text: string,
+    threadTs?: string,
+  ): Promise<{ ok?: boolean; ts?: string; channel?: string; error?: string }> {
     const web = await this.requireWeb();
 
     let result;
     try {
       result = await web.chat.postMessage({
         channel: targetId,
-        text: message,
+        text,
+        ...(threadTs ? { thread_ts: threadTs } : {}),
       });
     } catch (error) {
       throw new HitlError(
@@ -256,15 +372,7 @@ export class SlackAdapter implements ChannelAdapter {
       );
     }
 
-    return {
-      messageId: result.ts,
-      target: { channel: "slack", targetId: result.channel ?? targetId },
-      text: message,
-    };
-  }
-
-  onMessage(handler: MessageHandler): void {
-    this.handlers.push(handler);
+    return result;
   }
 
   private async doConnect(): Promise<void> {
@@ -306,9 +414,10 @@ export class SlackAdapter implements ChannelAdapter {
         // Acknowledgement failures should not crash the process.
       }
 
-      const incoming = mapSlackEventToIncoming(event as Parameters<typeof mapSlackEventToIncoming>[0], {
-        botUserId: this.credentials?.botUserId,
-      });
+      const incoming = mapSlackEventToIncoming(
+        event as Parameters<typeof mapSlackEventToIncoming>[0],
+        { botUserId: this.credentials?.botUserId },
+      );
 
       if (!incoming) {
         return;

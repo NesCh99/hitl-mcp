@@ -12,6 +12,7 @@
   },
   "files": [
     "dist",
+    "agent-rules",
     "README.md",
     "docs"
   ],

@@ -114,7 +114,7 @@ Agent A → MCP connection A → pending A1
 Agent B → MCP connection B → pending B1
 ```
 
-Responses route by outbound message correlation (and thus back to the correct connection's promise). When a connection closes, all of its pending requests are rejected and removed from memory.
+Responses route by outbound message correlation. When a connection closes, all of its pending requests are rejected and removed from memory.
 
 ## Channel adapters
 
@@ -143,4 +143,4 @@ MCP stdio
 + Tests
 ```
 
-Real Slack (Socket Mode) and WhatsApp adapters are scaffolded but not required for the first milestone.
+Slack (Socket Mode) is supported. WhatsApp is scaffolded.

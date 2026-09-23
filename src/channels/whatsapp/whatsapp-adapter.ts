@@ -44,7 +44,11 @@ export class WhatsAppAdapter implements ChannelAdapter {
     return [];
   }
 
-  async sendMessage(_targetId: string, _message: string): Promise<SentMessage> {
+  async sendMessage(
+    _targetId: string,
+    _message: string,
+    _options?: import("../../core/types.js").SendMessageOptions,
+  ): Promise<SentMessage> {
     throw new HitlError(
       "PROVIDER_NOT_CONFIGURED",
       "WhatsApp sendMessage is not implemented yet.",

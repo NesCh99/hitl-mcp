@@ -4,26 +4,32 @@ import type { IncomingMessage, PendingRequest } from "./types.js";
  * Correlates an incoming human message to a pending ask_human request.
  *
  * Preferred path: provider-native reply via `replyToMessageId`.
- * Fallback codes and provider-specific tricks stay inside adapters;
- * this module only works with normalized IDs.
+ * When multiple pending asks share the same correlation id (e.g. several
+ * questions in one Slack session thread), the oldest pending request wins (FIFO).
  */
 export function findMatchingPendingRequest(
   pending: ReadonlyMap<string, PendingRequest>,
   message: IncomingMessage,
 ): PendingRequest | undefined {
-  if (message.replyToMessageId) {
-    for (const request of pending.values()) {
-      if (request.outboundMessageId === message.replyToMessageId) {
-        return request;
-      }
-    }
+  if (!message.replyToMessageId) {
+    return undefined;
   }
 
-  return undefined;
+  let oldest: PendingRequest | undefined;
+  for (const request of pending.values()) {
+    if (request.outboundMessageId !== message.replyToMessageId) {
+      continue;
+    }
+    if (!oldest || request.createdAt < oldest.createdAt) {
+      oldest = request;
+    }
+  }
+  return oldest;
 }
 
 /**
- * Index pending requests by outbound message ID for O(1) reply correlation.
+ * @deprecated Prefer findMatchingPendingRequest for FIFO-safe correlation.
+ * Kept for callers that need a simple index (last-write wins).
  */
 export function indexByOutboundMessageId(
   pending: ReadonlyMap<string, PendingRequest>,
@@ -36,11 +42,8 @@ export function indexByOutboundMessageId(
 }
 
 export function correlateByReply(
-  byOutboundId: ReadonlyMap<string, PendingRequest>,
+  pending: ReadonlyMap<string, PendingRequest>,
   message: IncomingMessage,
 ): PendingRequest | undefined {
-  if (!message.replyToMessageId) {
-    return undefined;
-  }
-  return byOutboundId.get(message.replyToMessageId);
+  return findMatchingPendingRequest(pending, message);
 }

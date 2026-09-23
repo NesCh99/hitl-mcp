@@ -5,18 +5,26 @@ import {
   HitlError,
   type IncomingMessage,
   type SentMessage,
+  type SessionRef,
   type Target,
 } from "./types.js";
 
 export interface AskHumanInput {
   question: string;
   connectionId: string;
+  /** Agent chat/session — opens one provider thread per session when supported. */
+  session: SessionRef;
   target?: Target;
+  /**
+   * Optional timeout in milliseconds.
+   * When omitted, HITL waits until the human replies or the MCP connection closes.
+   */
   timeoutMs?: number;
 }
 
 export interface NotifyHumanInput {
   message: string;
+  session: SessionRef;
   target?: Target;
 }
 
@@ -24,8 +32,6 @@ export interface AskHumanResult {
   requestId: string;
   response: IncomingMessage;
 }
-
-const DEFAULT_ASK_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
  * HITL core: ephemeral human communication and correlation only.
@@ -44,10 +50,6 @@ export class HitlManager {
     return this.pending;
   }
 
-  /**
-   * Attach incoming-message routing once adapters are registered.
-   * Safe to call multiple times.
-   */
   startListening(): void {
     if (this.messageHandlerAttached) {
       return;
@@ -81,6 +83,7 @@ export class HitlManager {
 
   async askHuman(input: AskHumanInput): Promise<AskHumanResult> {
     this.startListening();
+    this.validateSession(input.session);
 
     const target = this.resolveTarget(input.target);
     const adapter = this.channels.getAdapter(target.channel);
@@ -96,7 +99,9 @@ export class HitlManager {
 
     let sent: SentMessage;
     try {
-      sent = await adapter.sendMessage(target.targetId, input.question);
+      sent = await adapter.sendMessage(target.targetId, input.question, {
+        session: input.session,
+      });
     } catch (error) {
       throw new HitlError(
         "CONNECTION_FAILURE",
@@ -104,12 +109,13 @@ export class HitlManager {
       );
     }
 
-    const timeoutMs = input.timeoutMs ?? DEFAULT_ASK_TIMEOUT_MS;
     const { requestId, promise } = this.pending.create({
       connectionId: input.connectionId,
       target,
-      outboundMessageId: sent.messageId,
-      timeoutMs,
+      outboundMessageId: sent.correlationId ?? sent.messageId,
+      sessionId: input.session.id,
+      question: input.question,
+      timeoutMs: input.timeoutMs,
     });
 
     const response = await promise;
@@ -117,6 +123,8 @@ export class HitlManager {
   }
 
   async notifyHuman(input: NotifyHumanInput): Promise<SentMessage> {
+    this.validateSession(input.session);
+
     const target = this.resolveTarget(input.target);
     const adapter = this.channels.getAdapter(target.channel);
 
@@ -130,7 +138,9 @@ export class HitlManager {
     await adapter.connect();
 
     try {
-      return await adapter.sendMessage(target.targetId, input.message);
+      return await adapter.sendMessage(target.targetId, input.message, {
+        session: input.session,
+      });
     } catch (error) {
       throw new HitlError(
         "CONNECTION_FAILURE",
@@ -141,6 +151,15 @@ export class HitlManager {
 
   onConnectionClosed(connectionId: string): void {
     this.pending.rejectConnection(connectionId);
+  }
+
+  private validateSession(session: SessionRef): void {
+    if (!session.id || session.id.trim().length === 0) {
+      throw new HitlError(
+        "INVALID_TARGET",
+        "session.id is required so concurrent threads can stay separate.",
+      );
+    }
   }
 
   private validateTarget(target: Target): void {

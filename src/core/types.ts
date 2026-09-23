@@ -16,8 +16,30 @@ export interface Target {
   targetId: string;
 }
 
+/**
+ * Ephemeral thread identity for a channel conversation.
+ * Adapters may open a provider-native thread per id (e.g. one Slack thread
+ * per MCP connection). Not persisted — lives only in process memory.
+ */
+export interface SessionRef {
+  /** Stable id for this thread. Concurrent threads must use different ids. */
+  id: string;
+  /** Optional display label for the thread opener (e.g. task title). */
+  name?: string;
+}
+
+export interface SendMessageOptions {
+  session?: SessionRef;
+}
+
 export interface SentMessage {
   messageId: string;
+  /**
+   * Id used to correlate human replies to pending asks.
+   * When set (e.g. Slack session root `ts`), pending requests use this
+   * instead of `messageId`.
+   */
+  correlationId?: string;
   target: Target;
   text: string;
 }
@@ -37,6 +59,9 @@ export interface PendingRequest {
   connectionId: string;
   target: Target;
   outboundMessageId: string;
+  /** Session that opened this ask — ephemeral metadata only. */
+  sessionId?: string;
+  question?: string;
   createdAt: number;
   expiresAt?: number;
   resolve: (response: IncomingMessage) => void;

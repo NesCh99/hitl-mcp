@@ -1,12 +1,33 @@
 # hitl-mcp
 
-> Connect your AI agent to a conversation you already use. When the agent needs you, it asks there.
+> Stay aware of what your agent is doing. Get pinged for tiny decisions. Go back to the chat when something bigger needs you.
 
-HITL-MCP is an **ephemeral communication bridge** between an AI agent execution and a human.
+HITL-MCP is an **ephemeral communication bridge** between an AI agent execution and a human channel you already use (Slack, …).
 
 It is **not** a task manager, messaging platform, SaaS product, centralized gateway, or agent orchestration system.
 
-The agent owns its own task state and context. HITL only provides the communication bridge.
+The agent owns its own task state and context. HITL only delivers progress and short questions.
+
+---
+
+## Vision
+
+```text
+Agent starts work     → notify_human ("Started …")
+Agent makes progress  → notify_human (milestones)
+Small, quick choice   → ask_human   (brief channel reply)
+Something important
+  / long to read      → notify_human ("Open the agent chat to reply")
+Agent finishes        → notify_human ("Done …")
+```
+
+| Situation | Tool | Where you respond |
+|---|---|---|
+| Progress from start → finish | `notify_human` | Nowhere (FYI only) |
+| Tiny question (yes/no, A/B, one line) | `ask_human` | In the channel thread |
+| Important / long / needs context | `notify_human` | In the **agent chat** |
+
+HITL is awareness + triage — not a second inbox for deep conversations.
 
 ---
 
@@ -26,9 +47,7 @@ Slack / WhatsApp / …
 Human
 ```
 
-When the agent needs a decision, confirmation, or input, it calls `ask_human`. The question appears in a channel you already use. Your reply resolves the call. Then the pending request disappears from memory.
-
-Nothing about the interaction is stored by HITL.
+Nothing about the interaction is stored by HITL. Pending asks live in memory only and disappear when the process exits.
 
 ---
 
@@ -53,31 +72,20 @@ Nothing about the interaction is stored by HITL.
 
 ## MCP tools
 
-### `ask_human`
-
-Send a question and wait for a human reply.
-
-```json
-{
-  "question": "Which option should I choose?",
-  "target": { "channel": "slack", "targetId": "C123" },
-  "timeoutMs": 300000
-}
-```
-
-`target` is optional. Without it, the configured default target is used. An override never modifies the saved default.
-
-For Slack, reply **in the thread** of the bot’s question.
+Exactly two:
 
 ### `notify_human`
 
-One-way notification. No pending request. No wait.
+One-way update. Use for:
 
-```json
-{
-  "message": "Deploy finished successfully."
-}
-```
+- start / progress / done
+- “Something needs you in the agent chat — open it to reply”
+
+### `ask_human`
+
+Short question; waits for a **brief** channel reply (confirm, pick an option, one line).
+
+Optional `label` sets the Slack thread title. On Slack, the first call opens a thread; later calls stay in it.
 
 ---
 
@@ -105,7 +113,7 @@ npm start
 
 Full walkthrough: [docs/slack.md](docs/slack.md)
 
-### MCP client config (Cursor example)
+### MCP client config
 
 ```json
 {
@@ -136,12 +144,15 @@ Full walkthrough: [docs/slack.md](docs/slack.md)
 - [Configuration](docs/configuration.md)
 - [Channels](docs/channels.md)
 - [Slack setup](docs/slack.md)
+- [Agent rules](docs/agent-rules.md)
+
+Optional agent guidance: [`agent-rules/HITL.md`](agent-rules/HITL.md)
 
 ---
 
 ## Non-goals
 
-No task management, databases, REST API, HTTP server for Slack events, web dashboard, user accounts, analytics, billing, cloud sync, conversation history, or agent orchestration.
+No task management, databases, REST API, web dashboard, user accounts, or conversation history.
 
 ---
 

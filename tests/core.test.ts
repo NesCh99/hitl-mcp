@@ -66,7 +66,7 @@ describe("PendingRequestManager", () => {
     await expect(promise).rejects.toThrow("boom");
   });
 
-  it("times out and cleans up", async () => {
+  it("times out and cleans up when timeoutMs is set", async () => {
     const { promise } = manager.create({
       connectionId: "conn-a",
       target: { channel: "fake", targetId: "local-hitl" },
@@ -78,6 +78,28 @@ describe("PendingRequestManager", () => {
       return err instanceof HitlError && err.code === "TIMEOUT";
     });
     expect(manager.size()).toBe(0);
+  });
+
+  it("waits without a HITL timeout when timeoutMs is omitted", async () => {
+    const { promise } = manager.create({
+      connectionId: "conn-a",
+      target: { channel: "fake", targetId: "local-hitl" },
+      outboundMessageId: "msg-1",
+    });
+
+    await new Promise((r) => setTimeout(r, 40));
+    expect(manager.size()).toBe(1);
+
+    manager.handleIncoming({
+      channel: "fake",
+      targetId: "local-hitl",
+      messageId: "r1",
+      replyToMessageId: "msg-1",
+      senderId: "human",
+      text: "late",
+    });
+
+    await expect(promise).resolves.toMatchObject({ text: "late" });
   });
 
   it("rejects all requests for a closed connection", async () => {
@@ -238,16 +260,17 @@ describe("Target resolution and overrides", () => {
     const ask = hitl.askHuman({
       question: "Default?",
       connectionId: "conn-1",
+      session: { id: "chat-1", name: "Chat 1" },
       timeoutMs: 2000,
     });
 
-    // Allow send to complete
+    // Allow send to complete (opener + question)
     await new Promise((r) => setTimeout(r, 10));
     const outbound = fake.sent.at(-1)!;
     expect(outbound.target.targetId).toBe("local-hitl");
 
     fake.simulateReply({
-      replyToMessageId: outbound.messageId,
+      replyToMessageId: outbound.correlationId ?? outbound.messageId,
       text: "ok",
     });
 
@@ -259,6 +282,7 @@ describe("Target resolution and overrides", () => {
     const ask = hitl.askHuman({
       question: "Override?",
       connectionId: "conn-1",
+      session: { id: "chat-1" },
       target: { channel: "fake", targetId: "development" },
       timeoutMs: 2000,
     });
@@ -268,7 +292,7 @@ describe("Target resolution and overrides", () => {
     expect(outbound.target.targetId).toBe("development");
 
     fake.simulateReply({
-      replyToMessageId: outbound.messageId,
+      replyToMessageId: outbound.correlationId ?? outbound.messageId,
       text: "dev ok",
     });
 
@@ -282,13 +306,15 @@ describe("Target resolution and overrides", () => {
     const ask = hitl.askHuman({
       question: "Override without save?",
       connectionId: "conn-1",
+      session: { id: "chat-1" },
       target: { channel: "fake", targetId: "development" },
       timeoutMs: 2000,
     });
 
     await new Promise((r) => setTimeout(r, 10));
+    const last = fake.sent.at(-1)!;
     fake.simulateReply({
-      replyToMessageId: fake.sent.at(-1)!.messageId,
+      replyToMessageId: last.correlationId ?? last.messageId,
       text: "done",
     });
     await ask;
@@ -311,9 +337,73 @@ describe("Target resolution and overrides", () => {
   });
 
   it("notify_human sends without creating a pending request", async () => {
-    const sent = await hitl.notifyHuman({ message: "FYI" });
+    const sent = await hitl.notifyHuman({
+      message: "FYI",
+      session: { id: "chat-1", name: "Chat 1" },
+    });
     expect(sent.messageId).toBeTruthy();
     expect(hitl.getPendingManager().size()).toBe(0);
+  });
+
+  it("opens one session thread and keeps later messages in it", async () => {
+    const ask1 = hitl.askHuman({
+      question: "Q1",
+      connectionId: "conn-1",
+      session: { id: "chat-a", name: "Feature X" },
+      timeoutMs: 2000,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(fake.sent[0]?.text).toBe("Started working on Feature X");
+    const rootId = fake.sent[0]!.messageId;
+    expect(fake.sent[1]?.correlationId).toBe(rootId);
+
+    fake.simulateReply({ replyToMessageId: rootId, text: "A1" });
+    await ask1;
+
+    const ask2 = hitl.askHuman({
+      question: "Q2",
+      connectionId: "conn-1",
+      session: { id: "chat-a", name: "Feature X" },
+      timeoutMs: 2000,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // No second opener — same session reuses the thread.
+    expect(fake.sent.filter((m) => m.text.startsWith("Started working on"))).toHaveLength(1);
+    expect(fake.sent.at(-1)?.correlationId).toBe(rootId);
+
+    fake.simulateReply({ replyToMessageId: rootId, text: "A2" });
+    await expect(ask2).resolves.toMatchObject({ response: { text: "A2" } });
+  });
+
+  it("isolates two concurrent sessions into separate threads", async () => {
+    const askA = hitl.askHuman({
+      question: "From A",
+      connectionId: "conn-1",
+      session: { id: "session-a", name: "Chat A" },
+      timeoutMs: 2000,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    const rootA = fake.getSessionRoot("local-hitl", "session-a")!.rootMessageId;
+
+    const askB = hitl.askHuman({
+      question: "From B",
+      connectionId: "conn-1",
+      session: { id: "session-b", name: "Chat B" },
+      timeoutMs: 2000,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    const rootB = fake.getSessionRoot("local-hitl", "session-b")!.rootMessageId;
+
+    expect(rootA).not.toBe(rootB);
+
+    fake.simulateReply({ replyToMessageId: rootB, text: "Answer B" });
+    fake.simulateReply({ replyToMessageId: rootA, text: "Answer A" });
+
+    const [a, b] = await Promise.all([askA, askB]);
+    expect(a.response.text).toBe("Answer A");
+    expect(b.response.text).toBe("Answer B");
   });
 });
 
@@ -334,27 +424,64 @@ describe("Connection isolation", () => {
     const askA = hitl.askHuman({
       question: "Question A",
       connectionId: "connection-a",
+      session: { id: "session-a" },
       timeoutMs: 3000,
     });
     await new Promise((r) => setTimeout(r, 10));
-    const msgA = fake.sent[0]!;
+    const rootA = fake.getSessionRoot("local-hitl", "session-a")!.rootMessageId;
 
     const askB = hitl.askHuman({
       question: "Question B",
       connectionId: "connection-b",
+      session: { id: "session-b" },
       timeoutMs: 3000,
     });
     await new Promise((r) => setTimeout(r, 10));
-    const msgB = fake.sent[1]!;
+    const rootB = fake.getSessionRoot("local-hitl", "session-b")!.rootMessageId;
 
-    // Reply to B first, then A — order must not matter
-    fake.simulateReply({ replyToMessageId: msgB.messageId, text: "Answer B" });
-    fake.simulateReply({ replyToMessageId: msgA.messageId, text: "Answer A" });
+    fake.simulateReply({ replyToMessageId: rootB, text: "Answer B" });
+    fake.simulateReply({ replyToMessageId: rootA, text: "Answer A" });
 
     const [resultA, resultB] = await Promise.all([askA, askB]);
     expect(resultA.response.text).toBe("Answer A");
     expect(resultB.response.text).toBe("Answer B");
     expect(hitl.getPendingManager().size()).toBe(0);
+  });
+
+  it("FIFO-resolves multiple pending asks in the same session thread", async () => {
+    const manager = new PendingRequestManager();
+
+    const first = manager.create({
+      connectionId: "conn",
+      target: { channel: "fake", targetId: "t" },
+      outboundMessageId: "thread-root",
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    const second = manager.create({
+      connectionId: "conn",
+      target: { channel: "fake", targetId: "t" },
+      outboundMessageId: "thread-root",
+    });
+
+    manager.handleIncoming({
+      channel: "fake",
+      targetId: "t",
+      messageId: "in-1",
+      replyToMessageId: "thread-root",
+      senderId: "human",
+      text: "first reply",
+    });
+    manager.handleIncoming({
+      channel: "fake",
+      targetId: "t",
+      messageId: "in-2",
+      replyToMessageId: "thread-root",
+      senderId: "human",
+      text: "second reply",
+    });
+
+    await expect(first.promise).resolves.toMatchObject({ text: "first reply" });
+    await expect(second.promise).resolves.toMatchObject({ text: "second reply" });
   });
 
   it("ignores cross-connection confusion when correlating by message id", async () => {

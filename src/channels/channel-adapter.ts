@@ -1,6 +1,7 @@
 import type {
   ChannelType,
   IncomingMessage,
+  SendMessageOptions,
   SentMessage,
   Target,
 } from "../core/types.js";
@@ -32,7 +33,11 @@ export interface ChannelAdapter {
 
   listTargets(): Promise<ListedTarget[]>;
 
-  sendMessage(targetId: string, message: string): Promise<SentMessage>;
+  sendMessage(
+    targetId: string,
+    message: string,
+    options?: SendMessageOptions,
+  ): Promise<SentMessage>;
 
   onMessage(handler: MessageHandler): void;
 }

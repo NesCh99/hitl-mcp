@@ -261,14 +261,75 @@ describe("SlackAdapter", () => {
     );
   });
 
-  it("sends messages and returns Slack ts as messageId", async () => {
+  it("opens a session thread then posts asks inside it", async () => {
+    const posts: Array<{ text: string; thread_ts?: string }> = [];
+    let counter = 0;
+    const web = createMockWeb({
+      postMessage: async ({ channel, text, thread_ts }) => {
+        counter += 1;
+        posts.push({ text, thread_ts });
+        return { ok: true, ts: `${counter}.0`, channel };
+      },
+    });
+    adapter = new SlackAdapter({
+      credentialStore: store,
+      createWebClient: () => web,
+      createSocketClient: () => mockSocket.socket,
+    });
+
     await adapter.authenticate();
-    const sent = await adapter.sendMessage("C_PUBLIC", "Should I proceed?");
+    const sent = await adapter.sendMessage("C_PUBLIC", "Should I proceed?", {
+      session: { id: "chat-1", name: "Feature X" },
+    });
+
+    expect(posts[0]).toEqual({
+      text: "Started working on Feature X",
+      thread_ts: undefined,
+    });
+    expect(posts[1]).toEqual({
+      text: "Should I proceed?",
+      thread_ts: "1.0",
+    });
     expect(sent).toEqual({
-      messageId: "111.222",
+      messageId: "2.0",
+      correlationId: "1.0",
       target: { channel: "slack", targetId: "C_PUBLIC" },
       text: "Should I proceed?",
     });
+    expect(adapter.getSessionThread("C_PUBLIC", "chat-1")?.rootTs).toBe("1.0");
+  });
+
+  it("reuses the same session thread for later messages", async () => {
+    let counter = 0;
+    const web = createMockWeb({
+      postMessage: async ({ channel, text, thread_ts }) => {
+        counter += 1;
+        return { ok: true, ts: `${counter}.0`, channel, text, thread_ts };
+      },
+    });
+    adapter = new SlackAdapter({
+      credentialStore: store,
+      createWebClient: () => web,
+      createSocketClient: () => mockSocket.socket,
+    });
+    await adapter.authenticate();
+
+    await adapter.sendMessage("C_PUBLIC", "Q1", {
+      session: { id: "chat-1", name: "Chat 1" },
+    });
+    const second = await adapter.sendMessage("C_PUBLIC", "Q2", {
+      session: { id: "chat-1", name: "Chat 1" },
+    });
+
+    expect(second.correlationId).toBe("1.0");
+    expect(counter).toBe(3); // opener + Q1 + Q2
+  });
+
+  it("requires a session for Slack sends", async () => {
+    await adapter.authenticate();
+    await expect(adapter.sendMessage("C_PUBLIC", "Nope")).rejects.toSatisfy(
+      (err: unknown) => err instanceof HitlError && err.code === "INVALID_TARGET",
+    );
   });
 
   it("converts socket message events into IncomingMessage for handlers", async () => {
@@ -291,6 +352,19 @@ describe("SlackAdapter", () => {
   });
 
   it("correlates a Slack thread reply with a pending ask_human request", async () => {
+    let counter = 0;
+    const web = createMockWeb({
+      postMessage: async ({ channel }) => {
+        counter += 1;
+        return { ok: true, ts: `${counter}.0`, channel };
+      },
+    });
+    adapter = new SlackAdapter({
+      credentialStore: store,
+      createWebClient: () => web,
+      createSocketClient: () => mockSocket.socket,
+    });
+
     const channels = new ChannelManager();
     channels.register(adapter);
 
@@ -306,11 +380,12 @@ describe("SlackAdapter", () => {
     const ask = hitl.askHuman({
       question: "Ship it?",
       connectionId: "conn-1",
+      session: { id: "chat-1", name: "Ship" },
       timeoutMs: 2000,
     });
 
-    // Allow send + pending registration
     await new Promise((r) => setTimeout(r, 10));
+    const rootTs = adapter.getSessionThread("C_PUBLIC", "chat-1")!.rootTs;
 
     await mockSocket.emitMessage({
       type: "message",
@@ -318,26 +393,21 @@ describe("SlackAdapter", () => {
       user: "U_HUMAN",
       text: "Yes, ship it",
       ts: "999.1",
-      thread_ts: "111.222",
+      thread_ts: rootTs,
     });
 
     const result = await ask;
     expect(result.response.text).toBe("Yes, ship it");
-    expect(result.response.replyToMessageId).toBe("111.222");
+    expect(result.response.replyToMessageId).toBe(rootTs);
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
-  it("handles two simultaneous pending requests without cross-talk", async () => {
-    let messageCounter = 0;
+  it("isolates two concurrent chat sessions into separate Slack threads", async () => {
+    let counter = 0;
     const web = createMockWeb({
-      postMessage: async ({ channel, text }) => {
-        messageCounter += 1;
-        return {
-          ok: true,
-          ts: `out-${messageCounter}`,
-          channel,
-          message: { text },
-        };
+      postMessage: async ({ channel }) => {
+        counter += 1;
+        return { ok: true, ts: `out-${counter}`, channel };
       },
     });
 
@@ -361,15 +431,22 @@ describe("SlackAdapter", () => {
     const askA = hitl.askHuman({
       question: "A?",
       connectionId: "conn-a",
+      session: { id: "chat-a", name: "Chat A" },
       timeoutMs: 2000,
     });
     await new Promise((r) => setTimeout(r, 10));
+    const rootA = localAdapter.getSessionThread("C_PUBLIC", "chat-a")!.rootTs;
+
     const askB = hitl.askHuman({
       question: "B?",
       connectionId: "conn-b",
+      session: { id: "chat-b", name: "Chat B" },
       timeoutMs: 2000,
     });
     await new Promise((r) => setTimeout(r, 10));
+    const rootB = localAdapter.getSessionThread("C_PUBLIC", "chat-b")!.rootTs;
+
+    expect(rootA).not.toBe(rootB);
 
     await socketA.emitMessage({
       type: "message",
@@ -377,7 +454,7 @@ describe("SlackAdapter", () => {
       user: "U_HUMAN",
       text: "Answer B",
       ts: "in-b",
-      thread_ts: "out-2",
+      thread_ts: rootB,
     });
     await socketA.emitMessage({
       type: "message",
@@ -385,7 +462,7 @@ describe("SlackAdapter", () => {
       user: "U_HUMAN",
       text: "Answer A",
       ts: "in-a",
-      thread_ts: "out-1",
+      thread_ts: rootA,
     });
 
     const [a, b] = await Promise.all([askA, askB]);
@@ -394,6 +471,19 @@ describe("SlackAdapter", () => {
   });
 
   it("does not resolve pending requests for unrelated Slack messages", async () => {
+    let counter = 0;
+    const web = createMockWeb({
+      postMessage: async ({ channel }) => {
+        counter += 1;
+        return { ok: true, ts: `${counter}.0`, channel };
+      },
+    });
+    adapter = new SlackAdapter({
+      credentialStore: store,
+      createWebClient: () => web,
+      createSocketClient: () => mockSocket.socket,
+    });
+
     const channels = new ChannelManager();
     channels.register(adapter);
     const config: HitlConfig = {
@@ -407,6 +497,7 @@ describe("SlackAdapter", () => {
     const ask = hitl.askHuman({
       question: "Waiting?",
       connectionId: "conn-1",
+      session: { id: "chat-1" },
       timeoutMs: 80,
     });
     await new Promise((r) => setTimeout(r, 10));
@@ -423,5 +514,15 @@ describe("SlackAdapter", () => {
     await expect(ask).rejects.toSatisfy(
       (err: unknown) => err instanceof HitlError && err.code === "TIMEOUT",
     );
+  });
+
+  it("clears session threads on disconnect", async () => {
+    await adapter.authenticate();
+    await adapter.sendMessage("C_PUBLIC", "hi", {
+      session: { id: "chat-1", name: "Chat" },
+    });
+    expect(adapter.getSessionThread("C_PUBLIC", "chat-1")).toBeDefined();
+    await adapter.disconnect();
+    expect(adapter.getSessionThread("C_PUBLIC", "chat-1")).toBeUndefined();
   });
 });

@@ -49,6 +49,7 @@ export interface SlackWebApi {
     postMessage: (args: {
       channel: string;
       text: string;
+      thread_ts?: string;
     }) => Promise<SlackPostMessageResult>;
   };
 }

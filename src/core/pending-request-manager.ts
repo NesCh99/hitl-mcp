@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { correlateByReply, indexByOutboundMessageId } from "./correlation.js";
+import { correlateByReply } from "./correlation.js";
 import {
   HitlError,
   type IncomingMessage,
@@ -11,6 +11,8 @@ export interface CreatePendingRequestInput {
   connectionId: string;
   target: Target;
   outboundMessageId: string;
+  sessionId?: string;
+  question?: string;
   timeoutMs?: number;
 }
 
@@ -39,7 +41,7 @@ export class PendingRequestManager {
       reject = rej;
     });
 
-    // Prevent unhandled rejection if the connection cleans up after settle.
+    // Avoid unhandled rejection when clear/reject runs without an active awaiter.
     promise.catch(() => undefined);
 
     const request: PendingRequest = {
@@ -47,6 +49,8 @@ export class PendingRequestManager {
       connectionId: input.connectionId,
       target: input.target,
       outboundMessageId: input.outboundMessageId,
+      sessionId: input.sessionId,
+      question: input.question,
       createdAt,
       expiresAt,
       resolve,
@@ -65,7 +69,6 @@ export class PendingRequestManager {
           ),
         );
       }, input.timeoutMs);
-      // Do not keep the process alive solely for pending HITL timeouts.
       timer.unref?.();
       this.timers.set(requestId, timer);
     }
@@ -95,13 +98,8 @@ export class PendingRequestManager {
     return true;
   }
 
-  /**
-   * Route an incoming message to the matching pending request via reply correlation.
-   * Returns true if a pending request was resolved.
-   */
   handleIncoming(message: IncomingMessage): boolean {
-    const byOutbound = indexByOutboundMessageId(this.pending);
-    const match = correlateByReply(byOutbound, message);
+    const match = correlateByReply(this.pending, message);
     if (!match) {
       return false;
     }
@@ -127,15 +125,6 @@ export class PendingRequestManager {
 
   get(requestId: string): PendingRequest | undefined {
     return this.pending.get(requestId);
-  }
-
-  getByOutboundMessageId(outboundMessageId: string): PendingRequest | undefined {
-    for (const request of this.pending.values()) {
-      if (request.outboundMessageId === outboundMessageId) {
-        return request;
-      }
-    }
-    return undefined;
   }
 
   size(): number {

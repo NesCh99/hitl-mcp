@@ -48,10 +48,13 @@ describe("ask_human end-to-end flow", () => {
     const ask = hitl.askHuman({
       question: "¿Debo crear la rama feature/x?",
       connectionId: "conn-1",
+      session: { id: "chat-1", name: "feature/x" },
       timeoutMs: 5000,
     });
 
-    await waitForSent(fake, 1);
+    // opener + question
+    await waitForSent(fake, 2);
+    expect(fake.sent[0]?.text).toBe("Started working on feature/x");
     const outbound = fake.getLastSentMessage()!;
     expect(outbound.text).toBe("¿Debo crear la rama feature/x?");
     expect(hitl.getPendingManager().size()).toBe(1);
@@ -63,27 +66,29 @@ describe("ask_human end-to-end flow", () => {
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
-  it("correlates each reply to the correct request when two asks are pending", async () => {
+  it("correlates each reply to the correct session when two chats are pending", async () => {
     const askA = hitl.askHuman({
       question: "Question A",
       connectionId: "conn-a",
+      session: { id: "chat-a", name: "Chat A" },
       timeoutMs: 5000,
     });
-    await waitForSent(fake, 1);
-    const msgA = fake.sent[0]!;
+    await waitForSent(fake, 2);
+    const rootA = fake.getSessionRoot("local-hitl", "chat-a")!.rootMessageId;
 
     const askB = hitl.askHuman({
       question: "Question B",
       connectionId: "conn-b",
+      session: { id: "chat-b", name: "Chat B" },
       timeoutMs: 5000,
     });
-    await waitForSent(fake, 2);
-    const msgB = fake.sent[1]!;
+    await waitForSent(fake, 4);
+    const rootB = fake.getSessionRoot("local-hitl", "chat-b")!.rootMessageId;
 
     expect(hitl.getPendingManager().size()).toBe(2);
 
-    fake.simulateReply({ replyToMessageId: msgB.messageId, text: "Answer B" });
-    fake.simulateReply({ replyToMessageId: msgA.messageId, text: "Answer A" });
+    fake.simulateReply({ replyToMessageId: rootB, text: "Answer B" });
+    fake.simulateReply({ replyToMessageId: rootA, text: "Answer A" });
 
     const [resultA, resultB] = await Promise.all([askA, askB]);
     expect(resultA.response.text).toBe("Answer A");
@@ -95,10 +100,11 @@ describe("ask_human end-to-end flow", () => {
     const ask = hitl.askHuman({
       question: "¿Debo crear la rama feature/x?",
       connectionId: "conn-1",
+      session: { id: "chat-1" },
       timeoutMs: 50,
     });
 
-    await waitForSent(fake, 1);
+    await waitForSent(fake, 2);
     expect(hitl.getPendingManager().size()).toBe(1);
 
     await expect(ask).rejects.toSatisfy((err: unknown) => {
@@ -111,10 +117,11 @@ describe("ask_human end-to-end flow", () => {
     const ask = hitl.askHuman({
       question: "¿Debo crear la rama feature/x?",
       connectionId: "conn-mcp",
+      session: { id: "chat-1" },
       timeoutMs: 5000,
     });
 
-    await waitForSent(fake, 1);
+    await waitForSent(fake, 2);
     expect(hitl.getPendingManager().size()).toBe(1);
 
     hitl.onConnectionClosed("conn-mcp");

@@ -36,8 +36,9 @@ Working end-to-end:
 
 - User’s own Slack App (no centralized HITL bot)
 - Local Socket Mode via `@slack/socket-mode` + `@slack/web-api`
+- **One Slack thread per MCP connection** (opener + follow-ups in-thread)
 - Target discovery for public/private channels the bot has joined
-- `ts` → `messageId`, `thread_ts` → `replyToMessageId`
+- Session root `ts` → correlation; `thread_ts` → `replyToMessageId`
 - Credentials via existing `CredentialStore`
 
 See the full guide: [slack.md](./slack.md)
