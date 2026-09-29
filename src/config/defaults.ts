@@ -24,3 +24,8 @@ export function getConfigPath(): string {
 export function getCredentialsDir(): string {
   return `${getConfigDir()}/credentials`;
 }
+
+/** Baileys multi-file auth state (separate from credentials JSON pointer). */
+export function getWhatsAppAuthDir(): string {
+  return `${getCredentialsDir()}/whatsapp-auth`;
+}

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Slack credentials are local user configuration — never runtime HITL state.
+ * Slack credentials are local user configuration.
  * Stored via CredentialStore under provider key "slack".
  */
 export const SlackCredentialsSchema = z.object({

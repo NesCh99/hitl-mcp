@@ -9,13 +9,18 @@ async function main(): Promise<void> {
 
   if (command === "setup") {
     const app = await createApp();
-    await runSetup({
-      configManager: app.configManager,
-      channelManager: app.channelManager,
-      credentialStore: app.credentialStore,
-    });
-    await app.channelManager.disconnectAll();
-    return;
+    try {
+      await runSetup({
+        configManager: app.configManager,
+        channelManager: app.channelManager,
+        credentialStore: app.credentialStore,
+      });
+    } finally {
+      await app.channelManager.disconnectAll();
+    }
+    // Baileys (and other channel sockets) can leave timers/handles that keep
+    // Node alive after a normal return — force the CLI to exit.
+    process.exit(process.exitCode ?? 0);
   }
 
   if (command === "help" || command === "--help" || command === "-h") {
@@ -41,9 +46,6 @@ async function main(): Promise<void> {
   });
   process.once("SIGTERM", () => {
     void shutdown().finally(() => process.exit(0));
-  });
-  process.once("beforeExit", () => {
-    void shutdown();
   });
 
   await startMcpServer(app.hitl);

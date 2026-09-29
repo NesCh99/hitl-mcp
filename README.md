@@ -95,7 +95,7 @@ Optional `label` sets the Slack thread title. On Slack, the first call opens a t
 npm install
 npm run build
 
-# Configure Slack (or Fake for local testing)
+# Configure Slack, WhatsApp, or Fake for local testing
 npm run setup
 # or: node dist/index.js setup
 
@@ -112,6 +112,14 @@ npm start
 5. Run `hitl-mcp setup` → choose Slack
 
 Full walkthrough: [docs/slack.md](docs/slack.md)
+
+### WhatsApp (local session)
+
+1. Run `hitl-mcp setup` → choose WhatsApp
+2. Link via QR (or pairing code) in WhatsApp → Linked Devices
+3. Pick a default chat/group (or paste a JID)
+
+Uses an unofficial client library — see warnings in [docs/whatsapp.md](docs/whatsapp.md).
 
 ### MCP client config
 
@@ -134,7 +142,7 @@ Full walkthrough: [docs/slack.md](docs/slack.md)
 |---|---|
 | Fake | Working (tests / local dev) |
 | Slack (Socket Mode) | Working |
-| WhatsApp | Scaffold only |
+| WhatsApp (Baileys) | Working |
 
 ---
 
@@ -144,6 +152,7 @@ Full walkthrough: [docs/slack.md](docs/slack.md)
 - [Configuration](docs/configuration.md)
 - [Channels](docs/channels.md)
 - [Slack setup](docs/slack.md)
+- [WhatsApp setup](docs/whatsapp.md)
 - [Agent rules](docs/agent-rules.md)
 
 Optional agent guidance: [`agent-rules/HITL.md`](agent-rules/HITL.md)

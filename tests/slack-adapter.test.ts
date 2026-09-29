@@ -283,11 +283,11 @@ describe("SlackAdapter", () => {
     });
 
     expect(posts[0]).toEqual({
-      text: "Started working on Feature X",
+      text: "**assistant** Started working on Feature X",
       thread_ts: undefined,
     });
     expect(posts[1]).toEqual({
-      text: "Should I proceed?",
+      text: "**assistant** Should I proceed?",
       thread_ts: "1.0",
     });
     expect(sent).toEqual({

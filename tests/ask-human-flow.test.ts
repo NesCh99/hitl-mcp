@@ -54,9 +54,9 @@ describe("ask_human end-to-end flow", () => {
 
     // opener + question
     await waitForSent(fake, 2);
-    expect(fake.sent[0]?.text).toBe("Started working on feature/x");
+    expect(fake.sent[0]?.text).toBe("**assistant** Started working on feature/x");
     const outbound = fake.getLastSentMessage()!;
-    expect(outbound.text).toBe("¿Debo crear la rama feature/x?");
+    expect(outbound.text).toBe("**assistant** ¿Debo crear la rama feature/x?");
     expect(hitl.getPendingManager().size()).toBe(1);
 
     fake.simulateReplyToLast("sí");

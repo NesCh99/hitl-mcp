@@ -2,6 +2,7 @@ import { LocalCredentialStore } from "./auth/credential-store.js";
 import { ChannelManager } from "./channels/channel-manager.js";
 import { FakeChannelAdapter } from "./channels/fake/fake-channel-adapter.js";
 import { SlackAdapter } from "./channels/slack/slack-adapter.js";
+import { WhatsAppAdapter } from "./channels/whatsapp/whatsapp-adapter.js";
 import { ConfigManager } from "./config/config-manager.js";
 import { HitlManager } from "./core/hitl-manager.js";
 import type { HitlConfig } from "./config/config-schema.js";
@@ -13,6 +14,7 @@ export interface AppContext {
   hitl: HitlManager;
   fakeAdapter: FakeChannelAdapter;
   slackAdapter: SlackAdapter;
+  whatsappAdapter: WhatsAppAdapter;
   loadConfig: () => Promise<HitlConfig>;
 }
 
@@ -39,8 +41,10 @@ export async function createApp(options?: {
   channelManager.register(fakeAdapter);
 
   const slackAdapter = new SlackAdapter({ credentialStore });
+  const whatsappAdapter = new WhatsAppAdapter({ credentialStore });
   if (!options?.fakeOnly) {
     channelManager.register(slackAdapter);
+    channelManager.register(whatsappAdapter);
   }
 
   // Restore fake auth from credential store if previously set up.
@@ -49,10 +53,19 @@ export async function createApp(options?: {
     await fakeAdapter.authenticate();
   }
 
-  // Validate Slack credentials when present (does not start Socket Mode yet).
+  // Validate Slack credentials when present.
   if (!options?.fakeOnly && (await slackAdapter.isAuthenticated())) {
     try {
       await slackAdapter.authenticate();
+    } catch {
+      // Leave unauthenticated; ask_human will surface a clear error.
+    }
+  }
+
+  // Validate WhatsApp session pointer when present.
+  if (!options?.fakeOnly && (await whatsappAdapter.isAuthenticated())) {
+    try {
+      await whatsappAdapter.authenticate();
     } catch {
       // Leave unauthenticated; ask_human will surface a clear error.
     }
@@ -68,6 +81,7 @@ export async function createApp(options?: {
     hitl,
     fakeAdapter,
     slackAdapter,
+    whatsappAdapter,
     loadConfig: async () => {
       cachedConfig = await configManager.load();
       return cachedConfig;

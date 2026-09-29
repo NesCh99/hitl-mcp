@@ -2,6 +2,7 @@ import { LogLevel, WebClient } from "@slack/web-api";
 import { LogLevel as SocketLogLevel, SocketModeClient } from "@slack/socket-mode";
 import type { CredentialStore } from "../../auth/credential-store.js";
 import { HitlError } from "../../core/types.js";
+import { formatHitlOutbound } from "../../core/outbound-format.js";
 import type {
   ChannelType,
   SendMessageOptions,
@@ -84,7 +85,7 @@ export class SlackAdapter implements ChannelAdapter {
   private readonly createSocketClient: CreateSocketClient;
 
   private readonly handlers: MessageHandler[] = [];
-  /** In-memory only — session threads disappear when the process exits. */
+  /** Session threads for the current process. */
   private readonly sessions = new Map<string, SlackSessionThread>();
   private readonly sessionLocks = new Map<string, Promise<SlackSessionThread>>();
 
@@ -280,6 +281,19 @@ export class SlackAdapter implements ChannelAdapter {
     };
   }
 
+  async sendPlainMessage(
+    targetId: string,
+    message: string,
+  ): Promise<SentMessage> {
+    await this.connect();
+    const result = await this.post(targetId, message);
+    return {
+      messageId: result.ts!,
+      target: { channel: "slack", targetId: result.channel ?? targetId },
+      text: message,
+    };
+  }
+
   onMessage(handler: MessageHandler): void {
     this.handlers.push(handler);
   }
@@ -348,7 +362,7 @@ export class SlackAdapter implements ChannelAdapter {
     try {
       result = await web.chat.postMessage({
         channel: targetId,
-        text,
+        text: formatHitlOutbound(text),
         ...(threadTs ? { thread_ts: threadTs } : {}),
       });
     } catch (error) {

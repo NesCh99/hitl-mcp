@@ -17,8 +17,7 @@ export interface CreatePendingRequestInput {
 }
 
 /**
- * In-memory only. When the MCP process exits, all pending requests disappear.
- * That is intentional — HITL does not remember interactions across runs.
+ * In-memory pending ask_human requests for the current process.
  */
 export class PendingRequestManager {
   private readonly pending = new Map<string, PendingRequest>();

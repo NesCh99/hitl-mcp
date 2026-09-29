@@ -10,15 +10,13 @@ export type MessageHandler = (message: IncomingMessage) => void;
 
 /**
  * Target plus an optional display label for setup UIs.
- * Core routing still uses only `channel` + `targetId`.
  */
 export interface ListedTarget extends Target {
   label?: string;
 }
 
 /**
- * Provider-specific communication. Core must never contain Slack/WhatsApp logic.
- * Authentication, connection, IDs, reply relationships, and event formats live here.
+ * Provider-specific communication: auth, connection, IDs, replies, and events.
  */
 export interface ChannelAdapter {
   readonly type: ChannelType;
@@ -38,6 +36,9 @@ export interface ChannelAdapter {
     message: string,
     options?: SendMessageOptions,
   ): Promise<SentMessage>;
+
+  /** One-off send used by setup greeting. */
+  sendPlainMessage(targetId: string, message: string): Promise<SentMessage>;
 
   onMessage(handler: MessageHandler): void;
 }

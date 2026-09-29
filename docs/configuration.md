@@ -1,6 +1,6 @@
 # Configuration
 
-HITL persists only **user preferences** and **provider credentials**. It never persists tasks, messages, responses, or pending requests.
+HITL persists **user preferences** and **provider credentials**.
 
 ## Config file
 

@@ -2,7 +2,7 @@
  * Resolve which channel thread a tool call belongs to.
  *
  * Prefer the MCP transport session when the host provides one; otherwise use
- * this process connection id. Optional `label` is display-only.
+ * this process connection id. Optional `label` titles the thread opener.
  */
 
 export interface SessionResolveInput {

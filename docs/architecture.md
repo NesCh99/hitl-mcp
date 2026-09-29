@@ -103,7 +103,7 @@ Example:
 3. Adapter maps the event with `replyToMessageId = msg-123`
 4. `PendingRequestManager` resolves the matching in-memory request
 
-Fallback correlation (if a provider lacks reliable reply links) must stay inside the adapter. Core never requires users to type request IDs.
+Adapters own how provider reply links map onto `replyToMessageId`.
 
 ## Multiple agents / connections
 
@@ -129,7 +129,7 @@ Adapters own:
 - sender identity
 - event format translation → `IncomingMessage`
 
-HITL core has **no** Slack- or WhatsApp-specific knowledge.
+HITL core keeps provider details inside adapters.
 
 ## MVP shape
 
@@ -143,4 +143,4 @@ MCP stdio
 + Tests
 ```
 
-Slack (Socket Mode) is supported. WhatsApp is scaffolded.
+Supported channels: Slack and WhatsApp.

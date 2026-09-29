@@ -38,7 +38,8 @@ If your MCP server is named differently in `mcp.json`, use that name instead of 
 
 ## Thread identity
 
-HITL does not ask the model to pass a session id. With Cursor today, the Slack thread is keyed by the MCP connection (usually one process per workspace). Optional `label` is only a display title for the thread opener.
+With Cursor today, the channel thread is keyed by the MCP connection. Optional
+`label` titles the thread opener.
 
 ## Timeouts
 

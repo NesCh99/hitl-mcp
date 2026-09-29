@@ -20,6 +20,8 @@ export interface AskHumanInput {
    * When omitted, HITL waits until the human replies or the MCP connection closes.
    */
   timeoutMs?: number;
+  /** When the MCP client cancels/times out the tool call, abort this ask. */
+  signal?: AbortSignal;
 }
 
 export interface NotifyHumanInput {
@@ -34,8 +36,7 @@ export interface AskHumanResult {
 }
 
 /**
- * HITL core: ephemeral human communication and correlation only.
- * No provider-specific knowledge. No task or agent state.
+ * HITL core: ephemeral human communication and correlation.
  */
 export class HitlManager {
   private readonly pending = new PendingRequestManager();
@@ -117,6 +118,29 @@ export class HitlManager {
       question: input.question,
       timeoutMs: input.timeoutMs,
     });
+
+    const signal = input.signal;
+    if (signal) {
+      const cancel = () => {
+        queueMicrotask(() => {
+          this.pending.reject(
+            requestId,
+            new HitlError(
+              "CONNECTION_CLOSED",
+              "ask_human was cancelled before a human reply arrived.",
+            ),
+          );
+        });
+      };
+      if (signal.aborted) {
+        cancel();
+      } else {
+        signal.addEventListener("abort", cancel, { once: true });
+        void promise.finally(() => {
+          signal.removeEventListener("abort", cancel);
+        });
+      }
+    }
 
     const response = await promise;
     return { requestId, response };

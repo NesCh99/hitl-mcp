@@ -1,6 +1,6 @@
 # Channels
 
-Communication providers are plugged in through the `ChannelAdapter` interface.
+Communication providers plug in through the `ChannelAdapter` interface.
 
 ```ts
 interface ChannelAdapter {
@@ -10,38 +10,42 @@ interface ChannelAdapter {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listTargets(): Promise<ListedTarget[]>;
-  sendMessage(targetId: string, message: string): Promise<SentMessage>;
+  sendMessage(targetId: string, message: string, options?: SendMessageOptions): Promise<SentMessage>;
+  sendPlainMessage(targetId: string, message: string): Promise<SentMessage>;
   onMessage(handler: (message: IncomingMessage) => void): void;
 }
 ```
 
-`ListedTarget` extends `Target` with an optional `label` for setup UIs. Core routing still uses only `{ channel, targetId }`.
+`ListedTarget` extends `Target` with an optional `label` for setup UIs. Core
+routing uses `{ channel, targetId }`.
 
-`ChannelManager` registers adapters and routes by `ChannelType`. It does not own tasks, persistence, or pending-request state.
+After `hitl-mcp setup` selects a default target, it calls `sendPlainMessage` with
+a short greeting so you can confirm delivery.
+
+All outbound HITL messages are prefixed with `**assistant**`.
+
+`ChannelManager` registers adapters and routes by `ChannelType`.
 
 ## Fake
 
-`FakeChannelAdapter` exists for development and testing. Core tests use it exclusively (no network).
+`FakeChannelAdapter` is for development and testing.
 
 ```bash
 hitl-mcp setup
-# choose Fake (development / testing)
+# choose Fake
 ```
 
-## Slack (Socket Mode)
+## Slack
 
 Location: `src/channels/slack/`
 
-Working end-to-end:
-
-- User’s own Slack App (no centralized HITL bot)
 - Local Socket Mode via `@slack/socket-mode` + `@slack/web-api`
-- **One Slack thread per MCP connection** (opener + follow-ups in-thread)
-- Target discovery for public/private channels the bot has joined
+- One Slack thread per MCP connection
+- Target discovery for channels the bot has joined
 - Session root `ts` → correlation; `thread_ts` → `replyToMessageId`
-- Credentials via existing `CredentialStore`
+- Credentials via `CredentialStore`
 
-See the full guide: [slack.md](./slack.md)
+Full guide: [slack.md](./slack.md)
 
 | File | Role |
 |---|---|
@@ -50,16 +54,28 @@ See the full guide: [slack.md](./slack.md)
 | `slack-events.ts` | Event → `IncomingMessage` |
 | `types.ts` | Injected client interfaces for tests |
 
-## WhatsApp (scaffold)
+## WhatsApp
 
 Location: `src/channels/whatsapp/`
 
-Not registered in the running app yet. Planned later: local session auth, targets, send/receive — without storing message history.
+- Local multi-device session via `@whiskeysockets/baileys`
+- One conversation root per MCP session
+- Target discovery from live chat metadata and setup helpers
+- Quoted message id → correlation
+- Credentials via `CredentialStore` + local auth directory
 
-## Adding a new channel later
+Full guide: [whatsapp.md](./whatsapp.md)
+
+| File | Role |
+|---|---|
+| `whatsapp-adapter.ts` | Baileys adapter |
+| `whatsapp-auth.ts` | Credential schema + redaction |
+| `whatsapp-events.ts` | Event → `IncomingMessage` |
+| `types.ts` | Injected client interfaces for tests |
+
+## Adding a new channel
 
 1. Implement `ChannelAdapter` under `src/channels/<name>/`
 2. Keep provider-specific IDs and events inside the adapter
 3. Register with `ChannelManager` in `createApp`
 4. Extend setup credential collection if needed
-5. Do not teach HITL core about the provider

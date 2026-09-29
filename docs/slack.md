@@ -1,6 +1,6 @@
 # Slack channel
 
-HITL-MCP talks to Slack through **Socket Mode** on your local machine. No public HTTP endpoint and no HITL-operated Slack bot.
+HITL-MCP talks to Slack through **Socket Mode** on your local machine.
 
 ## Prerequisites
 
@@ -11,13 +11,13 @@ HITL-MCP talks to Slack through **Socket Mode** on your local machine. No public
 ## Create a Slack App
 
 1. Open [https://api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
-2. Name it (e.g. `HITL Local`) and pick your workspace
+2. Name it and pick your workspace
 
 ### Enable Socket Mode
 
 1. **Socket Mode** → enable **Enable Socket Mode**
 2. Create an **App-Level Token** with scope `connections:write`
-3. Copy the `xapp-...` token (store it securely; HITL will ask for it during setup)
+3. Copy the `xapp-...` token
 
 ### Bot token scopes
 
@@ -40,7 +40,7 @@ Under **Event Subscriptions**:
    - `message.channels`
    - `message.groups`
 
-Socket Mode replaces a Request URL — you do not need to expose an HTTP endpoint.
+Socket Mode replaces a Request URL.
 
 ### Install the app
 
@@ -55,7 +55,7 @@ In Slack, invite the bot to each channel you want as a HITL target:
 /invite @YourBotName
 ```
 
-Setup only lists channels where the bot is a member.
+Setup lists channels where the bot is a member.
 
 ## Configure HITL-MCP
 
@@ -67,9 +67,10 @@ npm run setup
 1. Choose **Slack**
 2. Paste the bot token (`xoxb-...`)
 3. Paste the app-level token (`xapp-...`)
-4. Select a default target (shown as `#channel-name (public|private)`)
+4. Select a default target, shown as `#channel-name (public|private)`
 
-Credentials are stored locally under `~/.hitl-mcp/credentials/` (separate from `config.json`). They are never sent to a HITL server and must not be committed to git.
+Credentials are stored under `~/.hitl-mcp/credentials/`. Setup sends a short
+greeting to the chosen target so you can confirm delivery.
 
 ## Connect an MCP client
 
@@ -84,23 +85,23 @@ Credentials are stored locally under `~/.hitl-mcp/credentials/` (separate from `
 }
 ```
 
-Start the server with `npm start` (or let the MCP client launch the command above).
+Start the server with `npm start`, or let the MCP client launch the command above.
 
 ## How replies work
 
-HITL uses **one Slack thread per MCP connection** (or host-provided transport session when available):
+HITL uses **one Slack thread per MCP connection**:
 
 1. First `ask_human` / `notify_human` posts a root message:
-   `Started working on {label || id}`
-2. Later messages stay **in that thread**
-3. Reply **in the thread** in Slack
-4. The adapter maps Slack `thread_ts` → `replyToMessageId` (= thread root)
-5. HITL resolves the matching in-memory pending request (FIFO if several asks wait in the same thread)
+   `**assistant** Started working on {label || id}`
+2. Later messages stay in that thread
+3. Reply **in the thread**
+4. The adapter maps Slack `thread_ts` → `replyToMessageId`
+5. HITL resolves the matching pending request; if several wait in the same thread, the oldest wins
 6. The pending request is removed from memory
 
-Optional `label` is only a display title for the opener.
+Outbound HITL text is prefixed with `**assistant**`.
 
-Unrelated channel messages (not in the thread) do not resolve pending questions.
+Optional `label` is a display title for the opener.
 
 ## Tool examples
 
@@ -113,7 +114,7 @@ Unrelated channel messages (not in the thread) do not resolve pending questions.
 }
 ```
 
-### ask_human (per-call target override)
+### ask_human with a target override
 
 ```json
 {
@@ -125,8 +126,6 @@ Unrelated channel messages (not in the thread) do not resolve pending questions.
 }
 ```
 
-The override does not change the saved default target.
-
 ### notify_human
 
 ```json
@@ -136,7 +135,7 @@ The override does not change the saved default target.
 }
 ```
 
-Posts into the same thread (creates the opener first if needed).
+Posts into the same thread, creating the opener first when needed.
 
 ## Troubleshooting
 
@@ -144,11 +143,11 @@ Posts into the same thread (creates the opener first if needed).
 |---|---|
 | No targets in setup | Invite the bot to channels; confirm `channels:read` / `groups:read` |
 | Messages not received | Event subscriptions + `channels:history` / `groups:history`; Socket Mode on |
-| `ask_human` times out | Reply **in the thread** (not a new top-level message) |
+| `ask_human` times out | Reply **in the thread** |
 | Auth errors | Re-run setup; regenerate tokens if revoked |
 
 ## Security
 
-- Tokens stay on your machine via the existing credential store
+- Tokens stay on your machine via the credential store
 - Tokens are redacted from error messages
-- Runtime HITL state (questions, answers, pending requests) is never persisted
+- Runtime HITL state stays in memory and disappears when the process exits

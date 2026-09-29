@@ -9,7 +9,6 @@ export type ChannelType = "fake" | "slack" | "whatsapp";
 
 /**
  * A communication destination. The meaning of `targetId` is adapter-owned.
- * Core never interprets provider-specific concepts (channels, chats, groups).
  */
 export interface Target {
   channel: ChannelType;
@@ -18,13 +17,11 @@ export interface Target {
 
 /**
  * Ephemeral thread identity for a channel conversation.
- * Adapters may open a provider-native thread per id (e.g. one Slack thread
- * per MCP connection). Not persisted — lives only in process memory.
  */
 export interface SessionRef {
   /** Stable id for this thread. Concurrent threads must use different ids. */
   id: string;
-  /** Optional display label for the thread opener (e.g. task title). */
+  /** Display label for the thread opener. */
   name?: string;
 }
 
@@ -34,11 +31,7 @@ export interface SendMessageOptions {
 
 export interface SentMessage {
   messageId: string;
-  /**
-   * Id used to correlate human replies to pending asks.
-   * When set (e.g. Slack session root `ts`), pending requests use this
-   * instead of `messageId`.
-   */
+  /** Id used to correlate human replies to pending asks. */
   correlationId?: string;
   target: Target;
   text: string;

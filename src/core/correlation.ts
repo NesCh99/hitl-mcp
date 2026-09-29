@@ -3,9 +3,11 @@ import type { IncomingMessage, PendingRequest } from "./types.js";
 /**
  * Correlates an incoming human message to a pending ask_human request.
  *
- * Preferred path: provider-native reply via `replyToMessageId`.
- * When multiple pending asks share the same correlation id (e.g. several
- * questions in one Slack session thread), the oldest pending request wins (FIFO).
+ * Provider-native reply via `replyToMessageId` only:
+ * - Slack: thread_ts of a thread reply (= session root ts)
+ * - WhatsApp: quoted stanza id mapped to the session root
+ *
+ * When multiple pending asks share the same correlation id, the oldest wins (FIFO).
  */
 export function findMatchingPendingRequest(
   pending: ReadonlyMap<string, PendingRequest>,

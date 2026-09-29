@@ -176,6 +176,26 @@ describe("Correlation", () => {
     manager.clear();
   });
 
+  it("ignores WhatsApp plain messages without a quote (thread/quote-only)", () => {
+    manager.create({
+      connectionId: "conn-a",
+      target: { channel: "whatsapp", targetId: "120@g.us" },
+      outboundMessageId: "out-1",
+    });
+
+    const matched = manager.handleIncoming({
+      channel: "whatsapp",
+      targetId: "120@g.us",
+      messageId: "in-plain",
+      senderId: "human",
+      text: "plain reply",
+    });
+
+    expect(matched).toBe(false);
+    expect(manager.size()).toBe(1);
+    manager.clear();
+  });
+
   it("handles multiple pending requests", async () => {
     const a = manager.create({
       connectionId: "conn-a",
@@ -354,7 +374,7 @@ describe("Target resolution and overrides", () => {
     });
     await new Promise((r) => setTimeout(r, 10));
 
-    expect(fake.sent[0]?.text).toBe("Started working on Feature X");
+    expect(fake.sent[0]?.text).toBe("**assistant** Started working on Feature X");
     const rootId = fake.sent[0]!.messageId;
     expect(fake.sent[1]?.correlationId).toBe(rootId);
 
@@ -370,7 +390,7 @@ describe("Target resolution and overrides", () => {
     await new Promise((r) => setTimeout(r, 10));
 
     // No second opener — same session reuses the thread.
-    expect(fake.sent.filter((m) => m.text.startsWith("Started working on"))).toHaveLength(1);
+    expect(fake.sent.filter((m) => m.text.includes("Started working on"))).toHaveLength(1);
     expect(fake.sent.at(-1)?.correlationId).toBe(rootId);
 
     fake.simulateReply({ replyToMessageId: rootId, text: "A2" });

@@ -12,6 +12,7 @@ import type {
   SessionRef,
 } from "../../core/types.js";
 import { HitlError } from "../../core/types.js";
+import { formatHitlOutbound } from "../../core/outbound-format.js";
 
 export interface FakeTargetOption {
   targetId: string;
@@ -104,10 +105,10 @@ export class FakeChannelAdapter implements ChannelAdapter {
         messageId: `fake-msg-${this.messageCounter}`,
         correlationId: thread.rootMessageId,
         target: { channel: this.type, targetId },
-        text: message,
+        text: formatHitlOutbound(message),
       };
       this.sent.push(sent);
-      return sent;
+      return { ...sent, text: message };
     }
 
     // Legacy path (no session): each message is its own correlation root.
@@ -115,10 +116,17 @@ export class FakeChannelAdapter implements ChannelAdapter {
     const sent: SentMessage = {
       messageId: `fake-msg-${this.messageCounter}`,
       target: { channel: this.type, targetId },
-      text: message,
+      text: formatHitlOutbound(message),
     };
     this.sent.push(sent);
-    return sent;
+    return { ...sent, text: message };
+  }
+
+  async sendPlainMessage(
+    targetId: string,
+    message: string,
+  ): Promise<SentMessage> {
+    return this.sendMessage(targetId, message);
   }
 
   onMessage(handler: MessageHandler): void {
@@ -225,7 +233,7 @@ export class FakeChannelAdapter implements ChannelAdapter {
       messageId: rootMessageId,
       correlationId: rootMessageId,
       target: { channel: this.type, targetId },
-      text: `Started working on ${label}`,
+      text: formatHitlOutbound(`Started working on ${label}`),
     };
     this.sent.push(opener);
 

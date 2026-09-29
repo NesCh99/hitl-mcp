@@ -38,6 +38,7 @@ export async function askHuman(
   connectionId: string,
   args: AskHumanArgs,
   session: SessionRef,
+  signal?: AbortSignal,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
   try {
     const result = await hitl.askHuman({
@@ -46,6 +47,7 @@ export async function askHuman(
       session,
       target: args.target as Target | undefined,
       timeoutMs: args.timeoutMs,
+      signal,
     });
 
     return {

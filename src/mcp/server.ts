@@ -13,12 +13,12 @@ const TargetShape = z
     targetId: z.string(),
   })
   .optional()
-  .describe("Optional per-call target override; does not change the saved default");
+  .describe("Optional per-call target override");
 
 const LabelShape = z
   .string()
   .optional()
-  .describe("Optional short label for the channel thread opener (e.g. task title)");
+  .describe("Optional short label for the channel thread opener");
 
 /**
  * MCP stdio server — progress notifications + short channel questions.
@@ -71,10 +71,16 @@ export async function startMcpServer(hitl: HitlManager): Promise<void> {
         label: parsed.label,
         transportSessionId: extra.sessionId,
       });
-      return askHuman(hitl, connectionId, parsed, {
-        id: session.id,
-        name: session.name,
-      });
+      return askHuman(
+        hitl,
+        connectionId,
+        parsed,
+        {
+          id: session.id,
+          name: session.name,
+        },
+        extra.signal,
+      );
     },
   );
 
@@ -84,9 +90,8 @@ export async function startMcpServer(hitl: HitlManager): Promise<void> {
     hitl.onConnectionClosed(connectionId);
   };
 
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
-  process.on("beforeExit", cleanup);
+  // Only clear pending asks when the MCP transport closes.
+  transport.onclose = cleanup;
 
   await server.connect(transport);
 }
