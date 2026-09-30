@@ -33,6 +33,11 @@ export interface SlackPostMessageResult {
   error?: string;
 }
 
+export type SlackMrkdwnBlock = {
+  type: "section";
+  text: { type: "mrkdwn"; text: string };
+};
+
 export interface SlackWebApi {
   auth: {
     test: () => Promise<SlackAuthTestResult>;
@@ -50,6 +55,9 @@ export interface SlackWebApi {
       channel: string;
       text: string;
       thread_ts?: string;
+      /** Ensures *bold* / _italic_ render in the visible message. */
+      blocks?: SlackMrkdwnBlock[];
+      mrkdwn?: boolean;
     }) => Promise<SlackPostMessageResult>;
   };
 }

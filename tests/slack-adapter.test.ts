@@ -262,12 +262,17 @@ describe("SlackAdapter", () => {
   });
 
   it("opens a session thread then posts asks inside it", async () => {
-    const posts: Array<{ text: string; thread_ts?: string }> = [];
+    const posts: Array<{
+      text: string;
+      thread_ts?: string;
+      blocks?: unknown;
+      mrkdwn?: boolean;
+    }> = [];
     let counter = 0;
     const web = createMockWeb({
-      postMessage: async ({ channel, text, thread_ts }) => {
+      postMessage: async ({ channel, text, thread_ts, blocks, mrkdwn }) => {
         counter += 1;
-        posts.push({ text, thread_ts });
+        posts.push({ text, thread_ts, blocks, mrkdwn });
         return { ok: true, ts: `${counter}.0`, channel };
       },
     });
@@ -282,13 +287,24 @@ describe("SlackAdapter", () => {
       session: { id: "chat-1", name: "Feature X" },
     });
 
-    expect(posts[0]).toEqual({
-      text: "**assistant** Started working on Feature X",
+    expect(posts[0]).toMatchObject({
+      text: "*assistant* Started working on Feature X",
       thread_ts: undefined,
+      mrkdwn: true,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*assistant* Started working on Feature X",
+          },
+        },
+      ],
     });
-    expect(posts[1]).toEqual({
-      text: "**assistant** Should I proceed?",
+    expect(posts[1]).toMatchObject({
+      text: "*assistant* Should I proceed?",
       thread_ts: "1.0",
+      mrkdwn: true,
     });
     expect(sent).toEqual({
       messageId: "2.0",

@@ -22,7 +22,7 @@ routing uses `{ channel, id }`.
 After `hitl-mcp setup` selects a default target, it calls `sendPlainMessage` with
 a short greeting so you can confirm delivery.
 
-All outbound HITL messages are prefixed with `**assistant**`.
+All outbound HITL messages are prefixed with `*assistant*`.
 
 `ChannelManager` registers adapters and routes by `ChannelType`.
 

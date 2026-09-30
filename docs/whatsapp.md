@@ -65,14 +65,14 @@ Start the server with `npm start`, or let the MCP client launch the command abov
 HITL correlates WhatsApp replies with **quote replies**:
 
 1. First `ask_human` / `notify_human` posts a root:
-   `**assistant** Started working on {label || id}`
+   `*assistant* Started working on {label || id}`
 2. Later HITL messages in the same MCP session quote that root
 3. Reply by **quoting** the HITL question or the opener
 4. The adapter maps the quoted message id → session root → `replyToMessageId`
 5. HITL resolves the matching pending request; if several wait on the same root, the oldest wins
 6. The pending request is removed from memory
 
-Outbound HITL text is prefixed with `**assistant**`. Your phone replies are accepted when they quote a HITL message; echoes of HITL’s own outbound sends are ignored.
+Outbound HITL text is prefixed with `*assistant*`. Your phone replies are accepted when they quote a HITL message; echoes of HITL’s own outbound sends are ignored.
 
 Optional `label` is a display title for the opener.
 

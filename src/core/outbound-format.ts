@@ -1,14 +1,19 @@
-/** Markdown mark so channel peers can tell HITL traffic apart from a human. */
-const HITL_ASSISTANT_PREFIX = "**assistant** ";
+/** Slack mrkdwn + WhatsApp both use single-asterisk bold. */
+const ASSISTANT_PREFIX = "*assistant* ";
 
 /**
- * Prefix outbound HITL text for every channel.
- * Idempotent if the prefix is already present.
+ * Prefix outbound HITL text so channel peers can tell it apart from a human.
+ * Idempotent if an assistant prefix is already present.
  */
 export function formatHitlOutbound(text: string): string {
   const trimmed = text.trimStart();
-  if (trimmed.toLowerCase().startsWith("**assistant**")) {
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith("*assistant*") ||
+    lower.startsWith("**assistant**") ||
+    lower.startsWith("_assistant_")
+  ) {
     return text;
   }
-  return `${HITL_ASSISTANT_PREFIX}${text}`;
+  return `${ASSISTANT_PREFIX}${text}`;
 }

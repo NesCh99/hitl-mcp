@@ -381,12 +381,22 @@ export class SlackAdapter implements ChannelAdapter {
     threadTs?: string,
   ): Promise<{ ok?: boolean; ts?: string; channel?: string; error?: string }> {
     const web = await this.requireWeb();
+    const body = formatHitlOutbound(text);
 
     let result;
     try {
+      // Plain `text` alone often shows literal asterisks. A mrkdwn section block
+      // is what Slack reliably renders as bold (*assistant*).
       result = await web.chat.postMessage({
         channel: id,
-        text: formatHitlOutbound(text),
+        text: body,
+        mrkdwn: true,
+        blocks: [
+          {
+            type: "section",
+            text: { type: "mrkdwn", text: body },
+          },
+        ],
         ...(threadTs ? { thread_ts: threadTs } : {}),
       });
     } catch (error) {

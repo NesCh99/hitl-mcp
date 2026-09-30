@@ -382,7 +382,7 @@ describe("Target resolution and overrides", () => {
     });
     await new Promise((r) => setTimeout(r, 10));
 
-    expect(fake.sent[0]?.text).toBe("**assistant** Started working on Feature X");
+    expect(fake.sent[0]?.text).toBe("*assistant* Started working on Feature X");
     const rootId = fake.sent[0]!.messageId;
     expect(fake.sent[1]?.correlationId).toBe(rootId);
 

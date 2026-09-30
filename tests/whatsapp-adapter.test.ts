@@ -106,8 +106,8 @@ function createMockSocket(): {
 
 describe("formatHitlOutbound", () => {
   it("prefixes assistant once", () => {
-    expect(formatHitlOutbound("Hi")).toBe("**assistant** Hi");
-    expect(formatHitlOutbound("**assistant** Hi")).toBe("**assistant** Hi");
+    expect(formatHitlOutbound("Hi")).toBe("*assistant* Hi");
+    expect(formatHitlOutbound("*assistant* Hi")).toBe("*assistant* Hi");
   });
 });
 
@@ -385,7 +385,7 @@ describe("WhatsAppAdapter", () => {
     expect(mock.sendMessage).toHaveBeenCalledWith(
       "111@s.whatsapp.net",
       {
-        text: "**assistant** Hi — your channel is connected and ready.",
+        text: "*assistant* Hi — your channel is connected and ready.",
       },
       undefined,
     );
@@ -399,10 +399,10 @@ describe("WhatsAppAdapter", () => {
     });
 
     expect(mock.sendMessage.mock.calls[0]?.[1]).toEqual({
-      text: "**assistant** Started working on Feature X",
+      text: "*assistant* Started working on Feature X",
     });
     expect(mock.sendMessage.mock.calls[1]?.[1]).toEqual({
-      text: "**assistant** Should I proceed?",
+      text: "*assistant* Should I proceed?",
     });
     expect(mock.sendMessage.mock.calls[1]?.[2]).toEqual({
       quoted: expect.objectContaining({
@@ -463,7 +463,7 @@ describe("WhatsAppAdapter", () => {
             id: askMessageId,
             fromMe: true,
           },
-          message: { conversation: "**assistant** Ship it?" },
+          message: { conversation: "*assistant* Ship it?" },
         },
       ],
     });

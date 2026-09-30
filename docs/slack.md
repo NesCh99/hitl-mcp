@@ -92,14 +92,14 @@ Start the server with `npm start`, or let the MCP client launch the command abov
 HITL uses **one Slack thread per MCP connection**:
 
 1. First `ask_human` / `notify_human` posts a root message:
-   `**assistant** Started working on {label || id}`
+   `*assistant* Started working on {label || id}`
 2. Later messages stay in that thread
 3. Reply **in the thread**
 4. The adapter maps Slack `thread_ts` → `replyToMessageId`
 5. HITL resolves the matching pending request; if several wait in the same thread, the oldest wins
 6. The pending request is removed from memory
 
-Outbound HITL text is prefixed with `**assistant**`.
+Outbound HITL text is prefixed with `*assistant*`.
 
 Optional `label` is a display title for the opener.
 
