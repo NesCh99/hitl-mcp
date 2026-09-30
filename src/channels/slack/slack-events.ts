@@ -74,7 +74,7 @@ export function mapSlackEventToIncoming(
 
   return {
     channel: "slack",
-    targetId: event.channel,
+    id: event.channel,
     messageId: event.ts,
     replyToMessageId: isThreadReply ? event.thread_ts : undefined,
     senderId: event.user,

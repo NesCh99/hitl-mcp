@@ -1,12 +1,27 @@
 # HITL-MCP agent rules
 
-Use these rules whenever HITL-MCP tools are available.
+Use these rules whenever HITL-MCP tools are available **and** HITL is not disabled for the current chat.
 
 ## Vision
 
 1. Keep the human aware from start → finish (`notify_human`)
 2. Ask only **tiny** questions in the channel (`ask_human`)
 3. For anything important or long, notify them to open the **agent chat**
+
+## Slash commands (user → you)
+
+When the user types one of these in **this** chat, call `configure_hitl` first, acknowledge briefly, then continue:
+
+| User message | Call |
+|---|---|
+| `/hitl.off` | `configure_hitl({ enabled: false })` |
+| `/hitl.on` | `configure_hitl({ enabled: true })` |
+| `/hitl-channel.<channel>` | `configure_hitl({ channel: "<channel>" })` |
+| `/hitl-channel` (clear) | `configure_hitl({ channel: null })` |
+
+After `/hitl.off`, **do not** call `notify_human` or `ask_human` until `/hitl.on` (even if other rules say to use HITL). If a tool still returns `skipped: true`, treat HITL as off and continue in the host chat only.
+
+`<channel>` is the provider: `slack`, `whatsapp`, or `fake` — matching `targets[].channel`. It is **not** `label` (group/channel title) and **not** `id`.
 
 ## Progress
 

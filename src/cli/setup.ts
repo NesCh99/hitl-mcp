@@ -87,9 +87,16 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
     console.log(
       channel === "whatsapp"
         ? "\nConnecting WhatsApp (scan QR / enter pairing code if prompted)...\n"
-        : "",
+        : channel === "slack"
+          ? "\nListing Slack channels the bot has joined...\n"
+          : "",
     );
-    await adapter.connect();
+
+    // WhatsApp needs a live session to discover chats. Slack listing/greeting
+    // use the Web API only — Socket Mode is for receiving replies at runtime.
+    if (channel === "whatsapp") {
+      await adapter.connect();
+    }
 
     // WhatsApp chat lists fill in asynchronously after link.
     let targets = await adapter.listTargets();
@@ -162,7 +169,7 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
         `\nSending a test greeting to ${formatTarget(selected)}...`,
       );
       await adapter.sendPlainMessage(
-        selected.targetId,
+        selected.id,
         "Hi — your channel is connected and ready.",
       );
       // Give Baileys a moment to flush the ciphertext before we tear down the
@@ -177,15 +184,20 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
       return;
     }
 
-    const defaultTarget = {
+    const destination = {
       channel: selected.channel,
-      targetId: selected.targetId,
+      id: selected.id,
+      ...(selected.label ? { label: selected.label } : {}),
     };
 
-    const config = await deps.configManager.load();
+    const config = await deps.configManager.loadGlobal();
+    const nextTargets = config.targets.filter((t) => t.channel !== channel);
+    nextTargets.push(destination);
+
     const next: HitlConfig = {
       ...config,
-      defaultTarget,
+      defaultTarget: channel,
+      targets: nextTargets,
       channels: {
         ...config.channels,
         [channel]: {
@@ -201,13 +213,16 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
     await adapter.disconnect();
 
     console.log("\nDefault target saved.");
-    console.log(`  channel:  ${defaultTarget.channel}`);
-    console.log(`  targetId: ${defaultTarget.targetId}`);
+    console.log(`  channel:  ${destination.channel}`);
+    console.log(`  id:       ${destination.id}`);
     if (selected.label) {
       console.log(`  label:    ${selected.label}`);
     }
-    console.log(`  config:   ${deps.configManager.getPath()}`);
-    console.log("\nSetup complete. Point your MCP client at `hitl-mcp` (stdio).");
+    console.log(`  config:   ${deps.configManager.getGlobalPath()}`);
+    console.log(
+      `\nTip: in a chat, type /hitl-channel.${channel} to use this target; override per project in \`.hitl-mcp/config.json\`.`,
+    );
+    console.log("Setup complete. Point your MCP client at `hitl-mcp` (stdio).");
   } finally {
     rl.close();
   }
@@ -449,7 +464,7 @@ Listening for up to 90 seconds...
   }
 
   // Refresh label / normalize JID before greeting + save.
-  return await adapter.resolveTargetInfo(selected.targetId);
+  return await adapter.resolveTargetInfo(selected.id);
 }
 
 async function resolveWhatsAppTargetFromInvite(
@@ -505,8 +520,8 @@ function labelFor(type: ChannelType): string {
 }
 
 function formatTarget(target: ListedTarget): string {
-  if (target.label && target.label !== target.targetId) {
-    return `${target.label} (${target.targetId})`;
+  if (target.label && target.label !== target.id) {
+    return `${target.label} (${target.id})`;
   }
-  return target.targetId;
+  return target.id;
 }

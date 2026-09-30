@@ -142,7 +142,7 @@ describe("WhatsApp event mapping", () => {
       }),
     ).toEqual({
       channel: "whatsapp",
-      targetId: "chat-1",
+      id: "chat-1",
       messageId: "message-2",
       replyToMessageId: "message-1",
       senderId: "human-1",
@@ -354,24 +354,24 @@ describe("WhatsAppAdapter", () => {
     await connectAdapter();
 
     const targets = await adapter.listTargets();
-    expect(targets.map((t) => t.targetId).sort()).toEqual([
+    expect(targets.map((t) => t.id).sort()).toEqual([
       "111@s.whatsapp.net",
       "124700@lid",
       "999@g.us",
       "me@s.whatsapp.net",
     ]);
-    expect(targets.find((t) => t.targetId === "111@s.whatsapp.net")?.label).toBe(
+    expect(targets.find((t) => t.id === "111@s.whatsapp.net")?.label).toBe(
       "Alice",
     );
-    expect(targets.find((t) => t.targetId === "999@g.us")?.label).toBe("Team");
-    expect(targets.find((t) => t.targetId === "124700@lid")?.label).toBe("Bob");
-    expect(targets.find((t) => t.targetId === "me@s.whatsapp.net")?.label).toBe(
+    expect(targets.find((t) => t.id === "999@g.us")?.label).toBe("Team");
+    expect(targets.find((t) => t.id === "124700@lid")?.label).toBe("Bob");
+    expect(targets.find((t) => t.id === "me@s.whatsapp.net")?.label).toBe(
       "Me (this account)",
     );
 
     expect(adapter.getMyAccountTarget()).toEqual({
       channel: "whatsapp",
-      targetId: "me@s.whatsapp.net",
+      id: "me@s.whatsapp.net",
       label: "Me (this account)",
     });
   });
@@ -412,7 +412,7 @@ describe("WhatsAppAdapter", () => {
     expect(sent).toEqual({
       messageId: "out-2",
       correlationId: "out-1",
-      target: { channel: "whatsapp", targetId: "111@s.whatsapp.net" },
+      target: { channel: "whatsapp", id: "111@s.whatsapp.net" },
       text: "Should I proceed?",
     });
     expect(adapter.getSessionThread("111@s.whatsapp.net", "chat-1")?.rootMessageId).toBe(
@@ -436,7 +436,8 @@ describe("WhatsAppAdapter", () => {
     const channels = new ChannelManager();
     channels.register(adapter);
     const config: HitlConfig = {
-      defaultTarget: { channel: "whatsapp", targetId: "999@g.us" },
+      defaultTarget: "whatsapp",
+      targets: [{ channel: "whatsapp", id: "999@g.us" }],
       channels: { whatsapp: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);
@@ -489,7 +490,7 @@ describe("WhatsAppAdapter", () => {
     });
 
     const result = await ask;
-    expect(result.response.text).toBe("yes");
+    expect(result).toMatchObject({ kind: "answered", response: { text: "yes" } });
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
@@ -499,7 +500,8 @@ describe("WhatsAppAdapter", () => {
     const channels = new ChannelManager();
     channels.register(adapter);
     const config: HitlConfig = {
-      defaultTarget: { channel: "whatsapp", targetId: "999@g.us" },
+      defaultTarget: "whatsapp",
+      targets: [{ channel: "whatsapp", id: "999@g.us" }],
       channels: { whatsapp: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);
@@ -539,7 +541,8 @@ describe("WhatsAppAdapter", () => {
     const channels = new ChannelManager();
     channels.register(adapter);
     const config: HitlConfig = {
-      defaultTarget: { channel: "whatsapp", targetId: "111@s.whatsapp.net" },
+      defaultTarget: "whatsapp",
+      targets: [{ channel: "whatsapp", id: "111@s.whatsapp.net" }],
       channels: { whatsapp: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);
@@ -576,8 +579,10 @@ describe("WhatsAppAdapter", () => {
     });
 
     const result = await ask;
-    expect(result.response.text).toBe("Yes, ship it");
-    expect(result.response.replyToMessageId).toBe(rootId);
+    expect(result).toMatchObject({
+      kind: "answered",
+      response: { text: "Yes, ship it", replyToMessageId: rootId },
+    });
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
@@ -587,7 +592,8 @@ describe("WhatsAppAdapter", () => {
     const channels = new ChannelManager();
     channels.register(adapter);
     const config: HitlConfig = {
-      defaultTarget: { channel: "whatsapp", targetId: "111@s.whatsapp.net" },
+      defaultTarget: "whatsapp",
+      targets: [{ channel: "whatsapp", id: "111@s.whatsapp.net" }],
       channels: { whatsapp: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);
@@ -646,8 +652,8 @@ describe("WhatsAppAdapter", () => {
     });
 
     const [a, b] = await Promise.all([askA, askB]);
-    expect(a.response.text).toBe("Answer A");
-    expect(b.response.text).toBe("Answer B");
+    expect(a).toMatchObject({ kind: "answered", response: { text: "Answer A" } });
+    expect(b).toMatchObject({ kind: "answered", response: { text: "Answer B" } });
   });
 
   it("clears session threads on disconnect", async () => {

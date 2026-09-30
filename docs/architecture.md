@@ -26,15 +26,21 @@ NOTHING ELSE
 ## Request path
 
 ```text
-ask_human / notify_human
+ask_human / notify_human / configure_hitl
         ↓
    HitlManager
         ↓
-  resolve Target  (explicit override → else defaultTarget)
+  [configure_hitl] SessionPrefsStore (ephemeral per chat)
+        ↓
+  [ask / notify]
+  if session disabled → soft skip (no send)
+        ↓
+  resolve Target
+    (explicit override → session channel → config.defaultTarget → targets by channel)
         ↓
   ChannelManager.getAdapter(channel)
         ↓
-  ChannelAdapter.sendMessage(targetId, text)
+  ChannelAdapter.sendMessage(id, text)
         ↓
   [ask_human only]
   PendingRequestManager (in-memory Map)
@@ -48,12 +54,14 @@ ask_human / notify_human
 
 ### Persistent configuration (allowed)
 
-- default target
+- named targets (`targets`, one per provider channel)
+- default channel (`defaultTarget`)
 - enabled providers
 - provider configuration / IDs
 - local preferences
+- optional project overrides in `<workspace>/.hitl-mcp/config.json`
 
-Stored in `~/.hitl-mcp/config.json`.
+Stored globally in `~/.hitl-mcp/config.json`, optionally merged with a project file.
 
 ### Persistent credentials (allowed)
 
@@ -72,8 +80,9 @@ Stored under `~/.hitl-mcp/credentials/`, separated from config and from runtime 
 - message correlation mappings
 - timeouts
 - agent task state
+- per-chat HITL prefs (`/hitl.off`, `/hitl-channel.*`)
 
-When the MCP process exits, all pending requests disappear. That is intentional.
+When the MCP process exits, all pending requests and session prefs disappear. That is intentional.
 
 ## Target model
 
@@ -82,7 +91,7 @@ Core uses a single abstraction:
 ```ts
 interface Target {
   channel: ChannelType; // which adapter
-  targetId: string;     // destination inside that provider
+  id: string;           // destination inside that provider
 }
 ```
 

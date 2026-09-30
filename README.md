@@ -62,9 +62,9 @@ Nothing about the interaction is stored by HITL. Pending asks live in memory onl
 | No task database | Agents keep their own state |
 | Ephemeral pending requests | In memory only; gone when the process exits |
 | User-owned providers | Your Slack app / your WhatsApp session |
-| Persistent config only | Default target + provider prefs locally |
+| Persistent config only | Named targets + default + provider prefs locally; project `.hitl-mcp/config.json` overrides global |
 | Credentials separated | Tokens/sessions stored apart from runtime state |
-| Per-call overrides | Override the default target without changing config |
+| Per-call / per-chat overrides | Explicit `target`, or `/hitl-channel.*` / `/hitl.off` for this chat only |
 
 **Architectural rule:** if a feature requires HITL to remember something after the current agent execution ends, that feature probably does not belong here.
 
@@ -72,7 +72,7 @@ Nothing about the interaction is stored by HITL. Pending asks live in memory onl
 
 ## MCP tools
 
-Exactly two:
+Exactly three:
 
 ### `notify_human`
 
@@ -81,11 +81,17 @@ One-way update. Use for:
 - start / progress / done
 - “Something needs you in the agent chat — open it to reply”
 
+Soft-skips when HITL is disabled for the chat (`/hitl.off`).
+
 ### `ask_human`
 
-Short question; waits for a **brief** channel reply (confirm, pick an option, one line).
+Short question; waits for a **brief** channel reply (confirm, pick an option, one line). Soft-skips when disabled.
 
-Optional `label` sets the Slack thread title. On Slack, the first call opens a thread; later calls stay in it.
+### `configure_hitl`
+
+Per-chat prefs. Call when the user types `/hitl.off`, `/hitl.on`, or `/hitl-channel.<channel>` (e.g. `/hitl-channel.slack`).
+
+Optional `label` sets the channel thread title. On Slack, the first call opens a thread; later calls stay in it.
 
 ---
 
@@ -128,7 +134,10 @@ Uses an unofficial client library — see warnings in [docs/whatsapp.md](docs/wh
   "mcpServers": {
     "hitl": {
       "command": "node",
-      "args": ["/absolute/path/to/hitl-mcp/dist/index.js"]
+      "args": ["/absolute/path/to/hitl-mcp/dist/index.js"],
+      "env": {
+        "HITL_PROJECT_ROOT": "${workspaceFolder}"
+      }
     }
   }
 }

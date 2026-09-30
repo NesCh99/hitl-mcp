@@ -23,18 +23,24 @@ export interface AppContext {
  */
 export async function createApp(options?: {
   configPath?: string;
+  projectRoot?: string | null;
   /** When true, register only Fake (useful for isolated core tests). */
   fakeOnly?: boolean;
 }): Promise<AppContext> {
-  const configManager = new ConfigManager(options?.configPath);
+  const configManager = new ConfigManager({
+    globalPath: options?.configPath,
+    ...(options && "projectRoot" in options
+      ? { projectRoot: options.projectRoot }
+      : {}),
+  });
   const credentialStore = new LocalCredentialStore();
   const channelManager = new ChannelManager();
 
   const config = await configManager.load();
   const fakeTargets =
     config.channels.fake?.targets ?? [
-      { targetId: "local-hitl", label: "Local HITL" },
-      { targetId: "development", label: "Development" },
+      { id: "local-hitl", label: "Local HITL" },
+      { id: "development", label: "Development" },
     ];
 
   const fakeAdapter = new FakeChannelAdapter(fakeTargets);

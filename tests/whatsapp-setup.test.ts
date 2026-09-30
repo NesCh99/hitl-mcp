@@ -51,7 +51,7 @@ describe("formatListedTarget", () => {
     expect(
       formatListedTarget({
         channel: "whatsapp",
-        targetId: "1203@g.us",
+        id: "1203@g.us",
         label: "Team",
       }),
     ).toBe("Team (1203@g.us)");

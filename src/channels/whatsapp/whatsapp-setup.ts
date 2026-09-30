@@ -117,10 +117,10 @@ export function defaultSetupPhrase(): string {
 }
 
 export function formatListedTarget(target: ListedTarget): string {
-  if (target.label && target.label !== target.targetId) {
-    return `${target.label} (${target.targetId})`;
+  if (target.label && target.label !== target.id) {
+    return `${target.label} (${target.id})`;
   }
-  return target.targetId;
+  return target.id;
 }
 
 function normalizePhrase(value: string): string {

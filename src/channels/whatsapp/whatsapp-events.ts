@@ -21,7 +21,7 @@ export function mapWhatsAppEventToIncoming(
 ): IncomingMessage {
   return {
     channel: "whatsapp",
-    targetId: event.chatId,
+    id: event.chatId,
     messageId: event.messageId,
     replyToMessageId: event.quotedMessageId,
     senderId: event.senderId,

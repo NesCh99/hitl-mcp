@@ -10,14 +10,14 @@ interface ChannelAdapter {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listTargets(): Promise<ListedTarget[]>;
-  sendMessage(targetId: string, message: string, options?: SendMessageOptions): Promise<SentMessage>;
-  sendPlainMessage(targetId: string, message: string): Promise<SentMessage>;
+  sendMessage(id: string, message: string, options?: SendMessageOptions): Promise<SentMessage>;
+  sendPlainMessage(id: string, message: string): Promise<SentMessage>;
   onMessage(handler: (message: IncomingMessage) => void): void;
 }
 ```
 
 `ListedTarget` extends `Target` with an optional `label` for setup UIs. Core
-routing uses `{ channel, targetId }`.
+routing uses `{ channel, id }`.
 
 After `hitl-mcp setup` selects a default target, it calls `sendPlainMessage` with
 a short greeting so you can confirm delivery.

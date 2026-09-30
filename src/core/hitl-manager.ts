@@ -1,6 +1,16 @@
 import type { ChannelManager } from "../channels/channel-manager.js";
 import type { HitlConfig } from "../config/config-schema.js";
+import {
+  findTarget,
+  listTargetChannels,
+  toSendTarget,
+} from "../config/merge-config.js";
 import { PendingRequestManager } from "./pending-request-manager.js";
+import {
+  SessionPrefsStore,
+  type SessionPrefs,
+  type SessionPrefsPatch,
+} from "./session-prefs.js";
 import {
   HitlError,
   type IncomingMessage,
@@ -14,6 +24,7 @@ export interface AskHumanInput {
   connectionId: string;
   /** Agent chat/session — opens one provider thread per session when supported. */
   session: SessionRef;
+  /** Explicit destination; beats session channel and config default. */
   target?: Target;
   /**
    * Optional timeout in milliseconds.
@@ -27,6 +38,7 @@ export interface AskHumanInput {
 export interface NotifyHumanInput {
   message: string;
   session: SessionRef;
+  /** Explicit destination; beats session channel and config default. */
   target?: Target;
 }
 
@@ -35,11 +47,23 @@ export interface AskHumanResult {
   response: IncomingMessage;
 }
 
+export type AskHumanOutcome =
+  | { kind: "answered"; requestId: string; response: IncomingMessage }
+  | { kind: "skipped"; reason: "disabled"; message: string };
+
+export type NotifyHumanOutcome =
+  | { kind: "sent"; message: SentMessage }
+  | { kind: "skipped"; reason: "disabled"; message: string };
+
+const DISABLED_MESSAGE =
+  "HITL is disabled for this chat (/hitl.off). Continue without notify_human / ask_human until /hitl.on.";
+
 /**
  * HITL core: ephemeral human communication and correlation.
  */
 export class HitlManager {
   private readonly pending = new PendingRequestManager();
+  private readonly sessionPrefs = new SessionPrefsStore();
   private messageHandlerAttached = false;
 
   constructor(
@@ -49,6 +73,35 @@ export class HitlManager {
 
   getPendingManager(): PendingRequestManager {
     return this.pending;
+  }
+
+  getSessionPrefs(sessionId: string): SessionPrefs {
+    return this.sessionPrefs.get(sessionId);
+  }
+
+  configureSession(sessionId: string, patch: SessionPrefsPatch): SessionPrefs {
+    if (!sessionId.trim()) {
+      throw new HitlError(
+        "INVALID_TARGET",
+        "session id is required to configure HITL for a chat.",
+      );
+    }
+
+    if (patch.channel) {
+      const config = this.getConfig();
+      if (!findTarget(config, patch.channel)) {
+        throw new HitlError(
+          "UNKNOWN_TARGET_NAME",
+          `No target configured for channel "${patch.channel}". Known: ${formatTargetChannels(config)}.`,
+        );
+      }
+    }
+
+    return this.sessionPrefs.configure(sessionId, patch);
+  }
+
+  listTargetChannels(): string[] {
+    return listTargetChannels(this.getConfig());
   }
 
   startListening(): void {
@@ -64,29 +117,51 @@ export class HitlManager {
     }
   }
 
-  resolveTarget(override?: Target): Target {
+  /**
+   * Resolve destination for a call.
+   * Order: explicit target → session channel → config.defaultTarget.
+   */
+  resolveTarget(override?: Target, sessionId?: string): Target {
     if (override) {
       this.validateTarget(override);
       return override;
     }
 
     const config = this.getConfig();
-    if (!config.defaultTarget) {
+    const prefs = sessionId ? this.sessionPrefs.get(sessionId) : undefined;
+    const channel = prefs?.channel ?? config.defaultTarget;
+
+    if (!channel) {
       throw new HitlError(
         "NO_DEFAULT_TARGET",
         "No default target configured. Run `hitl-mcp setup` or pass an explicit target.",
       );
     }
 
-    this.validateTarget(config.defaultTarget);
-    return config.defaultTarget;
+    const named = findTarget(config, channel);
+    if (!named) {
+      throw new HitlError(
+        "UNKNOWN_TARGET_NAME",
+        `No target configured for channel "${channel}". Known: ${formatTargetChannels(config)}.`,
+      );
+    }
+
+    const target = toSendTarget(named);
+    this.validateTarget(target);
+    return target;
   }
 
-  async askHuman(input: AskHumanInput): Promise<AskHumanResult> {
-    this.startListening();
+  async askHuman(input: AskHumanInput): Promise<AskHumanOutcome> {
     this.validateSession(input.session);
 
-    const target = this.resolveTarget(input.target);
+    const prefs = this.sessionPrefs.get(input.session.id);
+    if (!prefs.enabled) {
+      return { kind: "skipped", reason: "disabled", message: DISABLED_MESSAGE };
+    }
+
+    this.startListening();
+
+    const target = this.resolveTarget(input.target, input.session.id);
     const adapter = this.channels.getAdapter(target.channel);
 
     if (!(await adapter.isAuthenticated())) {
@@ -100,7 +175,7 @@ export class HitlManager {
 
     let sent: SentMessage;
     try {
-      sent = await adapter.sendMessage(target.targetId, input.question, {
+      sent = await adapter.sendMessage(target.id, input.question, {
         session: input.session,
       });
     } catch (error) {
@@ -143,13 +218,18 @@ export class HitlManager {
     }
 
     const response = await promise;
-    return { requestId, response };
+    return { kind: "answered", requestId, response };
   }
 
-  async notifyHuman(input: NotifyHumanInput): Promise<SentMessage> {
+  async notifyHuman(input: NotifyHumanInput): Promise<NotifyHumanOutcome> {
     this.validateSession(input.session);
 
-    const target = this.resolveTarget(input.target);
+    const prefs = this.sessionPrefs.get(input.session.id);
+    if (!prefs.enabled) {
+      return { kind: "skipped", reason: "disabled", message: DISABLED_MESSAGE };
+    }
+
+    const target = this.resolveTarget(input.target, input.session.id);
     const adapter = this.channels.getAdapter(target.channel);
 
     if (!(await adapter.isAuthenticated())) {
@@ -159,12 +239,13 @@ export class HitlManager {
       );
     }
 
-    await adapter.connect();
-
+    // Outbound only — adapters that need a live session (e.g. WhatsApp) connect
+    // inside sendMessage. Slack notify uses Web API and must not start Socket Mode.
     try {
-      return await adapter.sendMessage(target.targetId, input.message, {
+      const message = await adapter.sendMessage(target.id, input.message, {
         session: input.session,
       });
+      return { kind: "sent", message };
     } catch (error) {
       throw new HitlError(
         "CONNECTION_FAILURE",
@@ -187,10 +268,10 @@ export class HitlManager {
   }
 
   private validateTarget(target: Target): void {
-    if (!target.channel || !target.targetId) {
+    if (!target.channel || !target.id) {
       throw new HitlError(
         "INVALID_TARGET",
-        "Target must include both channel and targetId.",
+        "Target must include both channel and id.",
       );
     }
 
@@ -201,4 +282,9 @@ export class HitlManager {
       );
     }
   }
+}
+
+function formatTargetChannels(config: HitlConfig): string {
+  const names = listTargetChannels(config);
+  return names.length > 0 ? names.join(", ") : "(none)";
 }

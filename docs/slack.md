@@ -121,7 +121,7 @@ Optional `label` is a display title for the opener.
   "question": "Should I create branch feature/x?",
   "target": {
     "channel": "slack",
-    "targetId": "C0123456789"
+    "id": "C0123456789"
   }
 }
 ```
@@ -142,8 +142,9 @@ Posts into the same thread, creating the opener first when needed.
 | Symptom | Check |
 |---|---|
 | No targets in setup | Invite the bot to channels; confirm `channels:read` / `groups:read` |
+| Messages not received / `ask_human` Socket Mode timeout | Enable **Socket Mode**; app-level token (`xapp-…`) with `connections:write`; Event Subscriptions for `message.channels` / `message.groups`. `notify_human` does **not** need Socket Mode (Web API only). |
 | Messages not received | Event subscriptions + `channels:history` / `groups:history`; Socket Mode on |
-| `ask_human` times out | Reply **in the thread** |
+| `ask_human` times out waiting for reply | Reply **in the thread** |
 | Auth errors | Re-run setup; regenerate tokens if revoked |
 
 ## Security

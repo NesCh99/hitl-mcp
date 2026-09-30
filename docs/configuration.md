@@ -2,77 +2,118 @@
 
 HITL persists **user preferences** and **provider credentials**.
 
-## Config file
+## Config hierarchy
 
-Path: `~/.hitl-mcp/config.json`
+| Layer | Path | Role |
+|---|---|---|
+| Global | `~/.hitl-mcp/config.json` | Shared defaults and targets |
+| Project | `<workspace>/.hitl-mcp/config.json` | Overrides for one repo (optional) |
+| Credentials | `~/.hitl-mcp/credentials/` | Always global |
+
+Project config **overrides** global: `defaultTarget` replaces if set; `targets` merge by **channel** (project wins on the same channel); `channels.*` shallow-merge.
+
+Point the MCP process at the workspace so project config is found:
 
 ```json
 {
-  "defaultTarget": {
-    "channel": "slack",
-    "targetId": "C123456789"
-  },
-  "channels": {
-    "fake": {
-      "enabled": true,
-      "targets": [
-        { "targetId": "local-hitl", "label": "Local HITL" },
-        { "targetId": "development", "label": "Development" }
-      ]
-    },
-    "slack": {
-      "enabled": true
-    },
-    "whatsapp": {
-      "enabled": false
+  "mcpServers": {
+    "hitl": {
+      "command": "node",
+      "args": ["/absolute/path/to/hitl-mcp/dist/index.js"],
+      "env": {
+        "HITL_PROJECT_ROOT": "${workspaceFolder}"
+      }
     }
   }
 }
 ```
 
-### Default target
-
-Chosen during `hitl-mcp setup`. Used whenever `ask_human` / `notify_human` omit `target`.
+## Config file shape
 
 ```json
 {
-  "defaultTarget": {
-    "channel": "slack",
-    "targetId": "C123456789"
+  "defaultTarget": "whatsapp",
+  "targets": [
+    {
+      "channel": "whatsapp",
+      "id": "120363412819593593@g.us",
+      "label": "Family HITL"
+    },
+    {
+      "channel": "slack",
+      "id": "C123456789",
+      "label": "#agent-hitl"
+    }
+  ],
+  "channels": {
+    "slack": { "enabled": true },
+    "whatsapp": { "enabled": true }
   }
 }
 ```
 
-Or:
+### Targets
+
+At most **one destination per provider channel** (`slack`, `whatsapp`, `fake`).
+
+| Field | Required | Meaning |
+|---|---|---|
+| `channel` | yes | Provider: `slack`, `whatsapp`, or `fake` |
+| `id` | yes | Provider destination (Slack channel id, WhatsApp JID, …) |
+| `label` | no | **Display only** — WhatsApp group title or Slack `#channel` |
+
+### `/hitl-channel.<channel>`
+
+The suffix is the **provider channel**, matching `targets[].channel`:
+
+| You type | Uses |
+|---|---|
+| `/hitl-channel.whatsapp` | the WhatsApp target |
+| `/hitl-channel.slack` | the Slack target |
+| `/hitl-channel.#agent-hitl` | **no** — that is `label` |
+| `/hitl-channel.C123` | **no** — that is `id` |
+
+### Default
+
+`defaultTarget` is a channel: `"whatsapp"` or `"slack"` (etc.).
+
+### Project override example
 
 ```json
 {
-  "defaultTarget": {
-    "channel": "fake",
-    "targetId": "local-hitl"
-  }
+  "defaultTarget": "slack",
+  "targets": [
+    {
+      "channel": "slack",
+      "id": "C_TEAM_PROJECT",
+      "label": "#project-hitl"
+    }
+  ]
 }
 ```
 
-The meaning of `targetId` is owned by the adapter. For Slack it is the channel ID (e.g. `C…`).
+## Per-chat controls
 
-For Slack App creation, Socket Mode, and required tokens, see [slack.md](./slack.md).
+Ephemeral (in memory for this MCP process / chat session):
 
-### Runtime override
+| User types | Agent calls | Effect |
+|---|---|---|
+| `/hitl.off` | `configure_hitl({ enabled: false })` | Soft-skip ask/notify |
+| `/hitl.on` | `configure_hitl({ enabled: true })` | Re-enable |
+| `/hitl-channel.slack` | `configure_hitl({ channel: "slack" })` | Use Slack target |
+| `/hitl-channel` / clear | `configure_hitl({ channel: null })` | Back to config default |
 
-Agents may pass a per-call `target`. That override:
+When disabled, `ask_human` / `notify_human` return a soft success (`skipped: true`) and do **not** send to any channel.
 
-- applies only to that call
-- does **not** rewrite `config.json`
-- leaves the next call (without `target`) on the saved default
+### Runtime tool override
+
+Agents may still pass a per-call `target: { channel, id }`. That beats session channel and config default for that call only; it does not rewrite config files.
 
 ## Credentials
 
 Path: `~/.hitl-mcp/credentials/<provider>.json`
 
 Credentials are stored separately from configuration. Files are written with restricted permissions when the OS allows it (`0600`).
-
-A future release may prefer OS secure storage (keychain) behind the same `CredentialStore` / `SecureStorage` interfaces.
 
 HITL does **not** create user accounts. There is no email, password, or centralized identity.
 
@@ -87,12 +128,12 @@ Flow:
 1. Detect existing configuration
 2. Ask which channel/provider to use
 3. Authenticate that provider
-4. Discover available targets
-5. Let you select a default target
-6. Save config locally
+4. Discover available destinations
+5. Let you select one (saves `channel` + `id` + `label`)
+6. Set that channel as `defaultTarget`
 7. Store provider credentials/session as required
 
-Re-run setup anytime to change the default target or configure another provider.
+Re-run setup anytime to change a channel’s destination or the default.
 
 ## What is never stored
 
@@ -101,4 +142,5 @@ Re-run setup anytime to change the default target or configure another provider.
 - questions and answers
 - conversation history
 - agent state
+- per-chat `/hitl.off` / channel selection (ephemeral only)
 - approval / audit history

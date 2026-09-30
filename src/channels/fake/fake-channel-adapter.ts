@@ -15,12 +15,12 @@ import { HitlError } from "../../core/types.js";
 import { formatHitlOutbound } from "../../core/outbound-format.js";
 
 export interface FakeTargetOption {
-  targetId: string;
+  id: string;
   label?: string;
 }
 
 interface FakeSessionThread {
-  targetId: string;
+  id: string;
   sessionId: string;
   rootMessageId: string;
   label: string;
@@ -46,7 +46,7 @@ export class FakeChannelAdapter implements ChannelAdapter {
   /** Outbound messages for test assertions (includes session openers). */
   readonly sent: SentMessage[] = [];
 
-  constructor(targets: FakeTargetOption[] = [{ targetId: "local-hitl", label: "Local HITL" }]) {
+  constructor(targets: FakeTargetOption[] = [{ id: "local-hitl", label: "Local HITL" }]) {
     this.targets = targets;
   }
 
@@ -76,35 +76,35 @@ export class FakeChannelAdapter implements ChannelAdapter {
   async listTargets(): Promise<ListedTarget[]> {
     return this.targets.map((t) => ({
       channel: this.type,
-      targetId: t.targetId,
-      label: t.label ?? t.targetId,
+      id: t.id,
+      label: t.label ?? t.id,
     }));
   }
 
   async sendMessage(
-    targetId: string,
+    id: string,
     message: string,
     options?: SendMessageOptions,
   ): Promise<SentMessage> {
     if (!this.connected) {
-      throw new HitlError("CONNECTION_FAILURE", "Fake channel is not connected.");
+      await this.connect();
     }
 
-    if (!this.targets.some((t) => t.targetId === targetId)) {
+    if (!this.targets.some((t) => t.id === id)) {
       throw new HitlError(
         "TARGET_NOT_FOUND",
-        `Fake target "${targetId}" not found.`,
+        `Fake target "${id}" not found.`,
       );
     }
 
     const session = options?.session;
     if (session?.id) {
-      const thread = this.ensureSession(targetId, session);
+      const thread = this.ensureSession(id, session);
       this.messageCounter += 1;
       const sent: SentMessage = {
         messageId: `fake-msg-${this.messageCounter}`,
         correlationId: thread.rootMessageId,
-        target: { channel: this.type, targetId },
+        target: { channel: this.type, id },
         text: formatHitlOutbound(message),
       };
       this.sent.push(sent);
@@ -115,7 +115,7 @@ export class FakeChannelAdapter implements ChannelAdapter {
     this.messageCounter += 1;
     const sent: SentMessage = {
       messageId: `fake-msg-${this.messageCounter}`,
-      target: { channel: this.type, targetId },
+      target: { channel: this.type, id },
       text: formatHitlOutbound(message),
     };
     this.sent.push(sent);
@@ -123,10 +123,10 @@ export class FakeChannelAdapter implements ChannelAdapter {
   }
 
   async sendPlainMessage(
-    targetId: string,
+    id: string,
     message: string,
   ): Promise<SentMessage> {
-    return this.sendMessage(targetId, message);
+    return this.sendMessage(id, message);
   }
 
   onMessage(handler: MessageHandler): void {
@@ -137,8 +137,8 @@ export class FakeChannelAdapter implements ChannelAdapter {
     return this.sent.at(-1);
   }
 
-  getSessionRoot(targetId: string, sessionId: string): FakeSessionThread | undefined {
-    return this.sessions.get(`${targetId}::${sessionId}`);
+  getSessionRoot(id: string, sessionId: string): FakeSessionThread | undefined {
+    return this.sessions.get(`${id}::${sessionId}`);
   }
 
   /**
@@ -167,24 +167,24 @@ export class FakeChannelAdapter implements ChannelAdapter {
     replyToMessageId: string;
     text: string;
     senderId?: string;
-    targetId?: string;
+    id?: string;
   }): IncomingMessage {
     const outbound = this.sent.find(
       (m) =>
         m.messageId === options.replyToMessageId ||
         m.correlationId === options.replyToMessageId,
     );
-    if (!outbound && !options.targetId) {
+    if (!outbound && !options.id) {
       throw new HitlError(
         "CORRELATION_FAILURE",
         `No outbound message with id "${options.replyToMessageId}".`,
       );
     }
 
-    const targetId = options.targetId ?? outbound!.target.targetId;
+    const id = options.id ?? outbound!.target.id;
     const message: IncomingMessage = {
       channel: this.type,
-      targetId,
+      id,
       messageId: randomUUID(),
       replyToMessageId: options.replyToMessageId,
       senderId: options.senderId ?? "fake-human",
@@ -196,13 +196,13 @@ export class FakeChannelAdapter implements ChannelAdapter {
   }
 
   simulateUnrelatedMessage(options: {
-    targetId: string;
+    id: string;
     text: string;
     senderId?: string;
   }): IncomingMessage {
     const message: IncomingMessage = {
       channel: this.type,
-      targetId: options.targetId,
+      id: options.id,
       messageId: randomUUID(),
       senderId: options.senderId ?? "fake-human",
       text: options.text,
@@ -219,8 +219,8 @@ export class FakeChannelAdapter implements ChannelAdapter {
     this.sessions.clear();
   }
 
-  private ensureSession(targetId: string, session: SessionRef): FakeSessionThread {
-    const key = `${targetId}::${session.id}`;
+  private ensureSession(id: string, session: SessionRef): FakeSessionThread {
+    const key = `${id}::${session.id}`;
     const existing = this.sessions.get(key);
     if (existing) {
       return existing;
@@ -232,13 +232,13 @@ export class FakeChannelAdapter implements ChannelAdapter {
     const opener: SentMessage = {
       messageId: rootMessageId,
       correlationId: rootMessageId,
-      target: { channel: this.type, targetId },
+      target: { channel: this.type, id },
       text: formatHitlOutbound(`Started working on ${label}`),
     };
     this.sent.push(opener);
 
     const thread: FakeSessionThread = {
-      targetId,
+      id,
       sessionId: session.id,
       rootMessageId,
       label,

@@ -24,7 +24,7 @@ describe("PendingRequestManager", () => {
   it("creates a pending request", () => {
     const { requestId } = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "msg-1",
     });
 
@@ -36,13 +36,13 @@ describe("PendingRequestManager", () => {
   it("resolves a pending request", async () => {
     const { requestId, promise } = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "msg-1",
     });
 
     const ok = manager.resolve(requestId, {
       channel: "fake",
-      targetId: "local-hitl",
+      id: "local-hitl",
       messageId: "reply-1",
       replyToMessageId: "msg-1",
       senderId: "human",
@@ -57,7 +57,7 @@ describe("PendingRequestManager", () => {
   it("rejects a pending request", async () => {
     const { requestId, promise } = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "msg-1",
     });
 
@@ -69,7 +69,7 @@ describe("PendingRequestManager", () => {
   it("times out and cleans up when timeoutMs is set", async () => {
     const { promise } = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "msg-1",
       timeoutMs: 30,
     });
@@ -83,7 +83,7 @@ describe("PendingRequestManager", () => {
   it("waits without a HITL timeout when timeoutMs is omitted", async () => {
     const { promise } = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "msg-1",
     });
 
@@ -92,7 +92,7 @@ describe("PendingRequestManager", () => {
 
     manager.handleIncoming({
       channel: "fake",
-      targetId: "local-hitl",
+      id: "local-hitl",
       messageId: "r1",
       replyToMessageId: "msg-1",
       senderId: "human",
@@ -105,12 +105,12 @@ describe("PendingRequestManager", () => {
   it("rejects all requests for a closed connection", async () => {
     const a = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "msg-a",
     });
     const b = manager.create({
       connectionId: "conn-b",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "msg-b",
     });
 
@@ -139,13 +139,13 @@ describe("Correlation", () => {
   it("correlates an incoming reply to the correct message", async () => {
     const { promise } = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "out-1",
     });
 
     const matched = manager.handleIncoming({
       channel: "fake",
-      targetId: "local-hitl",
+      id: "local-hitl",
       messageId: "in-1",
       replyToMessageId: "out-1",
       senderId: "human",
@@ -159,13 +159,13 @@ describe("Correlation", () => {
   it("ignores unrelated messages", () => {
     manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "local-hitl" },
+      target: { channel: "fake", id: "local-hitl" },
       outboundMessageId: "out-1",
     });
 
     const matched = manager.handleIncoming({
       channel: "fake",
-      targetId: "local-hitl",
+      id: "local-hitl",
       messageId: "in-unrelated",
       senderId: "human",
       text: "random chatter",
@@ -179,13 +179,13 @@ describe("Correlation", () => {
   it("ignores WhatsApp plain messages without a quote (thread/quote-only)", () => {
     manager.create({
       connectionId: "conn-a",
-      target: { channel: "whatsapp", targetId: "120@g.us" },
+      target: { channel: "whatsapp", id: "120@g.us" },
       outboundMessageId: "out-1",
     });
 
     const matched = manager.handleIncoming({
       channel: "whatsapp",
-      targetId: "120@g.us",
+      id: "120@g.us",
       messageId: "in-plain",
       senderId: "human",
       text: "plain reply",
@@ -199,18 +199,18 @@ describe("Correlation", () => {
   it("handles multiple pending requests", async () => {
     const a = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "t1" },
+      target: { channel: "fake", id: "t1" },
       outboundMessageId: "out-a",
     });
     const b = manager.create({
       connectionId: "conn-a",
-      target: { channel: "fake", targetId: "t1" },
+      target: { channel: "fake", id: "t1" },
       outboundMessageId: "out-b",
     });
 
     manager.handleIncoming({
       channel: "fake",
-      targetId: "t1",
+      id: "t1",
       messageId: "in-b",
       replyToMessageId: "out-b",
       senderId: "human",
@@ -218,7 +218,7 @@ describe("Correlation", () => {
     });
     manager.handleIncoming({
       channel: "fake",
-      targetId: "t1",
+      id: "t1",
       messageId: "in-a",
       replyToMessageId: "out-a",
       senderId: "human",
@@ -245,13 +245,16 @@ describe("Target resolution and overrides", () => {
     configManager = new ConfigManager(configPath);
 
     config = {
-      defaultTarget: { channel: "fake", targetId: "local-hitl" },
+      defaultTarget: "fake",
+      targets: [
+        { channel: "fake", id: "local-hitl", label: "Local HITL" },
+      ],
       channels: {
         fake: {
           enabled: true,
           targets: [
-            { targetId: "local-hitl" },
-            { targetId: "development" },
+            { id: "local-hitl" },
+            { id: "development" },
           ],
         },
       },
@@ -259,8 +262,8 @@ describe("Target resolution and overrides", () => {
     await configManager.save(config);
 
     fake = new FakeChannelAdapter([
-      { targetId: "local-hitl" },
-      { targetId: "development" },
+      { id: "local-hitl" },
+      { id: "development" },
     ]);
     await fake.authenticate();
 
@@ -287,7 +290,7 @@ describe("Target resolution and overrides", () => {
     // Allow send to complete (opener + question)
     await new Promise((r) => setTimeout(r, 10));
     const outbound = fake.sent.at(-1)!;
-    expect(outbound.target.targetId).toBe("local-hitl");
+    expect(outbound.target.id).toBe("local-hitl");
 
     fake.simulateReply({
       replyToMessageId: outbound.correlationId ?? outbound.messageId,
@@ -295,7 +298,7 @@ describe("Target resolution and overrides", () => {
     });
 
     const result = await ask;
-    expect(result.response.text).toBe("ok");
+    expect(result).toMatchObject({ kind: "answered", response: { text: "ok" } });
   });
 
   it("uses an explicit target override", async () => {
@@ -303,13 +306,13 @@ describe("Target resolution and overrides", () => {
       question: "Override?",
       connectionId: "conn-1",
       session: { id: "chat-1" },
-      target: { channel: "fake", targetId: "development" },
+      target: { channel: "fake", id: "development" },
       timeoutMs: 2000,
     });
 
     await new Promise((r) => setTimeout(r, 10));
     const outbound = fake.sent.at(-1)!;
-    expect(outbound.target.targetId).toBe("development");
+    expect(outbound.target.id).toBe("development");
 
     fake.simulateReply({
       replyToMessageId: outbound.correlationId ?? outbound.messageId,
@@ -321,13 +324,14 @@ describe("Target resolution and overrides", () => {
 
   it("does not modify persistent default when overriding", async () => {
     const before = await configManager.load();
-    expect(before.defaultTarget?.targetId).toBe("local-hitl");
+    expect(before.defaultTarget).toBe("fake");
+    expect(before.targets.find((x) => x.channel === "fake")?.id).toBe("local-hitl");
 
     const ask = hitl.askHuman({
       question: "Override without save?",
       connectionId: "conn-1",
       session: { id: "chat-1" },
-      target: { channel: "fake", targetId: "development" },
+      target: { channel: "fake", id: "development" },
       timeoutMs: 2000,
     });
 
@@ -340,11 +344,12 @@ describe("Target resolution and overrides", () => {
     await ask;
 
     const after = await configManager.load();
-    expect(after.defaultTarget?.targetId).toBe("local-hitl");
+    expect(after.defaultTarget).toBe("fake");
+    expect(after.targets.find((x) => x.channel === "fake")?.id).toBe("local-hitl");
   });
 
   it("rejects when neither explicit nor default target exists", () => {
-    config = { channels: {} };
+    config = { targets: [], channels: {} };
     hitl = new HitlManager(channels, () => config);
 
     expect(() => hitl.resolveTarget()).toThrow(HitlError);
@@ -361,7 +366,10 @@ describe("Target resolution and overrides", () => {
       message: "FYI",
       session: { id: "chat-1", name: "Chat 1" },
     });
-    expect(sent.messageId).toBeTruthy();
+    expect(sent.kind).toBe("sent");
+    if (sent.kind === "sent") {
+      expect(sent.message.messageId).toBeTruthy();
+    }
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
@@ -422,20 +430,21 @@ describe("Target resolution and overrides", () => {
     fake.simulateReply({ replyToMessageId: rootA, text: "Answer A" });
 
     const [a, b] = await Promise.all([askA, askB]);
-    expect(a.response.text).toBe("Answer A");
-    expect(b.response.text).toBe("Answer B");
+    expect(a).toMatchObject({ kind: "answered", response: { text: "Answer A" } });
+    expect(b).toMatchObject({ kind: "answered", response: { text: "Answer B" } });
   });
 });
 
 describe("Connection isolation", () => {
   it("routes response B to B and response A to A", async () => {
-    const fake = new FakeChannelAdapter([{ targetId: "local-hitl" }]);
+    const fake = new FakeChannelAdapter([{ id: "local-hitl" }]);
     await fake.authenticate();
     const channels = new ChannelManager();
     channels.register(fake);
 
     const config: HitlConfig = {
-      defaultTarget: { channel: "fake", targetId: "local-hitl" },
+      defaultTarget: "fake",
+      targets: [{ channel: "fake", id: "local-hitl" }],
       channels: { fake: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);
@@ -463,8 +472,8 @@ describe("Connection isolation", () => {
     fake.simulateReply({ replyToMessageId: rootA, text: "Answer A" });
 
     const [resultA, resultB] = await Promise.all([askA, askB]);
-    expect(resultA.response.text).toBe("Answer A");
-    expect(resultB.response.text).toBe("Answer B");
+    expect(resultA).toMatchObject({ kind: "answered", response: { text: "Answer A" } });
+    expect(resultB).toMatchObject({ kind: "answered", response: { text: "Answer B" } });
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
@@ -473,19 +482,19 @@ describe("Connection isolation", () => {
 
     const first = manager.create({
       connectionId: "conn",
-      target: { channel: "fake", targetId: "t" },
+      target: { channel: "fake", id: "t" },
       outboundMessageId: "thread-root",
     });
     await new Promise((r) => setTimeout(r, 5));
     const second = manager.create({
       connectionId: "conn",
-      target: { channel: "fake", targetId: "t" },
+      target: { channel: "fake", id: "t" },
       outboundMessageId: "thread-root",
     });
 
     manager.handleIncoming({
       channel: "fake",
-      targetId: "t",
+      id: "t",
       messageId: "in-1",
       replyToMessageId: "thread-root",
       senderId: "human",
@@ -493,7 +502,7 @@ describe("Connection isolation", () => {
     });
     manager.handleIncoming({
       channel: "fake",
-      targetId: "t",
+      id: "t",
       messageId: "in-2",
       replyToMessageId: "thread-root",
       senderId: "human",
@@ -509,18 +518,18 @@ describe("Connection isolation", () => {
 
     const a = manager.create({
       connectionId: "connection-a",
-      target: { channel: "fake", targetId: "t" },
+      target: { channel: "fake", id: "t" },
       outboundMessageId: "out-a",
     });
     const b = manager.create({
       connectionId: "connection-b",
-      target: { channel: "fake", targetId: "t" },
+      target: { channel: "fake", id: "t" },
       outboundMessageId: "out-b",
     });
 
     manager.handleIncoming({
       channel: "fake",
-      targetId: "t",
+      id: "t",
       messageId: "in-b",
       replyToMessageId: "out-b",
       senderId: "human",
@@ -536,8 +545,8 @@ describe("Connection isolation", () => {
 describe("FakeChannelAdapter", () => {
   it("simulates send, reply, and unrelated messages", async () => {
     const fake = new FakeChannelAdapter([
-      { targetId: "a" },
-      { targetId: "b" },
+      { id: "a" },
+      { id: "b" },
     ]);
     await fake.authenticate();
     await fake.connect();
@@ -551,12 +560,12 @@ describe("FakeChannelAdapter", () => {
     await fake.sendMessage("a", "follow-up");
     fake.simulateReplyToLast("reply to last");
 
-    fake.simulateUnrelatedMessage({ targetId: "a", text: "noise" });
+    fake.simulateUnrelatedMessage({ id: "a", text: "noise" });
 
     expect(fake.sent).toHaveLength(2);
     expect(received).toEqual(["hi back", "reply to last", "noise"]);
 
     const targets = await fake.listTargets();
-    expect(targets.map((t) => t.targetId)).toEqual(["a", "b"]);
+    expect(targets.map((t) => t.id)).toEqual(["a", "b"]);
   });
 });

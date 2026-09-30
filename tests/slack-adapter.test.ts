@@ -157,7 +157,7 @@ describe("mapSlackEventToIncoming", () => {
 
     expect(incoming).toEqual({
       channel: "slack",
-      targetId: "C123",
+      id: "C123",
       messageId: "200.2",
       replyToMessageId: "100.1",
       senderId: "U456",
@@ -252,11 +252,11 @@ describe("SlackAdapter", () => {
   it("lists only member public and private channels as targets", async () => {
     await adapter.authenticate();
     const targets = await adapter.listTargets();
-    expect(targets.map((t) => t.targetId)).toEqual(["C_PRIVATE", "C_PUBLIC"]);
-    expect(targets.find((t) => t.targetId === "C_PUBLIC")?.label).toBe(
+    expect(targets.map((t) => t.id)).toEqual(["C_PRIVATE", "C_PUBLIC"]);
+    expect(targets.find((t) => t.id === "C_PUBLIC")?.label).toBe(
       "#local-hitl (public)",
     );
-    expect(targets.find((t) => t.targetId === "C_PRIVATE")?.label).toBe(
+    expect(targets.find((t) => t.id === "C_PRIVATE")?.label).toBe(
       "#agents (private)",
     );
   });
@@ -293,7 +293,7 @@ describe("SlackAdapter", () => {
     expect(sent).toEqual({
       messageId: "2.0",
       correlationId: "1.0",
-      target: { channel: "slack", targetId: "C_PUBLIC" },
+      target: { channel: "slack", id: "C_PUBLIC" },
       text: "Should I proceed?",
     });
     expect(adapter.getSessionThread("C_PUBLIC", "chat-1")?.rootTs).toBe("1.0");
@@ -369,7 +369,8 @@ describe("SlackAdapter", () => {
     channels.register(adapter);
 
     const config: HitlConfig = {
-      defaultTarget: { channel: "slack", targetId: "C_PUBLIC" },
+      defaultTarget: "slack",
+      targets: [{ channel: "slack", id: "C_PUBLIC" }],
       channels: { slack: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);
@@ -397,8 +398,10 @@ describe("SlackAdapter", () => {
     });
 
     const result = await ask;
-    expect(result.response.text).toBe("Yes, ship it");
-    expect(result.response.replyToMessageId).toBe(rootTs);
+    expect(result).toMatchObject({
+      kind: "answered",
+      response: { text: "Yes, ship it", replyToMessageId: rootTs },
+    });
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
@@ -421,7 +424,8 @@ describe("SlackAdapter", () => {
     const channels = new ChannelManager();
     channels.register(localAdapter);
     const config: HitlConfig = {
-      defaultTarget: { channel: "slack", targetId: "C_PUBLIC" },
+      defaultTarget: "slack",
+      targets: [{ channel: "slack", id: "C_PUBLIC" }],
       channels: { slack: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);
@@ -466,8 +470,8 @@ describe("SlackAdapter", () => {
     });
 
     const [a, b] = await Promise.all([askA, askB]);
-    expect(a.response.text).toBe("Answer A");
-    expect(b.response.text).toBe("Answer B");
+    expect(a).toMatchObject({ kind: "answered", response: { text: "Answer A" } });
+    expect(b).toMatchObject({ kind: "answered", response: { text: "Answer B" } });
   });
 
   it("does not resolve pending requests for unrelated Slack messages", async () => {
@@ -487,7 +491,8 @@ describe("SlackAdapter", () => {
     const channels = new ChannelManager();
     channels.register(adapter);
     const config: HitlConfig = {
-      defaultTarget: { channel: "slack", targetId: "C_PUBLIC" },
+      defaultTarget: "slack",
+      targets: [{ channel: "slack", id: "C_PUBLIC" }],
       channels: { slack: { enabled: true } },
     };
     const hitl = new HitlManager(channels, () => config);

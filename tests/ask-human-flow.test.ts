@@ -6,12 +6,13 @@ import { HitlManager } from "../src/core/hitl-manager.js";
 import { HitlError } from "../src/core/types.js";
 
 function createTestHitl() {
-  const fake = new FakeChannelAdapter([{ targetId: "local-hitl" }]);
+  const fake = new FakeChannelAdapter([{ id: "local-hitl" }]);
   const channels = new ChannelManager();
   channels.register(fake);
 
   const config: HitlConfig = {
-    defaultTarget: { channel: "fake", targetId: "local-hitl" },
+    defaultTarget: "fake",
+    targets: [{ channel: "fake", id: "local-hitl" }],
     channels: { fake: { enabled: true } },
   };
 
@@ -62,7 +63,7 @@ describe("ask_human end-to-end flow", () => {
     fake.simulateReplyToLast("sí");
 
     const result = await ask;
-    expect(result.response.text).toBe("sí");
+    expect(result).toMatchObject({ kind: "answered", response: { text: "sí" } });
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 
@@ -91,8 +92,8 @@ describe("ask_human end-to-end flow", () => {
     fake.simulateReply({ replyToMessageId: rootA, text: "Answer A" });
 
     const [resultA, resultB] = await Promise.all([askA, askB]);
-    expect(resultA.response.text).toBe("Answer A");
-    expect(resultB.response.text).toBe("Answer B");
+    expect(resultA).toMatchObject({ kind: "answered", response: { text: "Answer A" } });
+    expect(resultB).toMatchObject({ kind: "answered", response: { text: "Answer B" } });
     expect(hitl.getPendingManager().size()).toBe(0);
   });
 

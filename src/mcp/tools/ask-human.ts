@@ -50,6 +50,26 @@ export async function askHuman(
       signal,
     });
 
+    if (result.kind === "skipped") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                ok: true,
+                skipped: true,
+                reason: result.reason,
+                message: result.message,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
+
     return {
       content: [
         {
@@ -62,7 +82,7 @@ export async function askHuman(
               messageId: result.response.messageId,
               target: {
                 channel: result.response.channel,
-                targetId: result.response.targetId,
+                id: result.response.id,
               },
             },
             null,

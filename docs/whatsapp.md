@@ -39,7 +39,7 @@ Setup then sends a short greeting to the chosen target so you can confirm delive
 Session files live under `~/.hitl-mcp/credentials/whatsapp-auth/`. A small pointer
 JSON is stored via the credential store.
 
-| Manual JID examples | Example `targetId` |
+| Manual JID examples | Example `id` |
 |---|---|
 | Direct chat | `15551234567@s.whatsapp.net` |
 | Direct chat | `123456789012345@lid` |
@@ -94,7 +94,7 @@ Optional `label` is a display title for the opener.
   "question": "Should I create branch feature/x?",
   "target": {
     "channel": "whatsapp",
-    "targetId": "15551234567@s.whatsapp.net"
+    "id": "15551234567@s.whatsapp.net"
   }
 }
 ```

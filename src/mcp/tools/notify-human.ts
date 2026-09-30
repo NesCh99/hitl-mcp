@@ -22,11 +22,31 @@ export async function notifyHuman(
   session: SessionRef,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
   try {
-    const sent = await hitl.notifyHuman({
+    const result = await hitl.notifyHuman({
       message: args.message,
       session,
       target: args.target as Target | undefined,
     });
+
+    if (result.kind === "skipped") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                ok: true,
+                skipped: true,
+                reason: result.reason,
+                message: result.message,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
 
     return {
       content: [
@@ -35,9 +55,9 @@ export async function notifyHuman(
           text: JSON.stringify(
             {
               ok: true,
-              messageId: sent.messageId,
-              correlationId: sent.correlationId,
-              target: sent.target,
+              messageId: result.message.messageId,
+              correlationId: result.message.correlationId,
+              target: result.message.target,
             },
             null,
             2,

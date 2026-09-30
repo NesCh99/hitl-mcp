@@ -36,7 +36,7 @@ export interface SlackAdapterOptions {
 }
 
 interface SlackSessionThread {
-  targetId: string;
+  id: string;
   sessionId: string;
   /** Root message ts — all replies in this thread use thread_ts = rootTs. */
   rootTs: string;
@@ -55,8 +55,8 @@ function defaultCreateSocketClient(appToken: string): SlackSocketClient {
   }) as unknown as SlackSocketClient;
 }
 
-function sessionKey(targetId: string, sessionId: string): string {
-  return `${targetId}::${sessionId}`;
+function sessionKey(id: string, sessionId: string): string {
+  return `${id}::${sessionId}`;
 }
 
 function sessionLabel(session: SessionRef): string {
@@ -65,6 +65,30 @@ function sessionLabel(session: SessionRef): string {
     return name;
   }
   return session.id;
+}
+
+const SOCKET_START_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new HitlError("CONNECTION_FAILURE", message));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 /**
@@ -242,7 +266,7 @@ export class SlackAdapter implements ChannelAdapter {
         const kind = channel.is_private ? "private" : "public";
         targets.push({
           channel: "slack",
-          targetId: channel.id,
+          id: channel.id,
           label: `${name} (${kind})`,
         });
       }
@@ -250,17 +274,17 @@ export class SlackAdapter implements ChannelAdapter {
       cursor = result.response_metadata?.next_cursor || undefined;
     } while (cursor);
 
-    targets.sort((a, b) => (a.label ?? a.targetId).localeCompare(b.label ?? b.targetId));
+    targets.sort((a, b) => (a.label ?? a.id).localeCompare(b.label ?? b.id));
     return targets;
   }
 
   async sendMessage(
-    targetId: string,
+    id: string,
     message: string,
     options?: SendMessageOptions,
   ): Promise<SentMessage> {
-    await this.connect();
-
+    // Outbound posts use the Web API only. Socket Mode (connect) is for
+    // receiving replies — HitlManager starts it for ask_human.
     const session = options?.session;
     if (!session?.id) {
       throw new HitlError(
@@ -269,27 +293,27 @@ export class SlackAdapter implements ChannelAdapter {
       );
     }
 
-    const thread = await this.ensureSessionThread(targetId, session);
-    const result = await this.post(targetId, message, thread.rootTs);
+    const thread = await this.ensureSessionThread(id, session);
+    const result = await this.post(id, message, thread.rootTs);
 
     return {
       messageId: result.ts!,
       // Replies in this Slack thread have thread_ts = rootTs.
       correlationId: thread.rootTs,
-      target: { channel: "slack", targetId: result.channel ?? targetId },
+      target: { channel: "slack", id: result.channel ?? id },
       text: message,
     };
   }
 
   async sendPlainMessage(
-    targetId: string,
+    id: string,
     message: string,
   ): Promise<SentMessage> {
-    await this.connect();
-    const result = await this.post(targetId, message);
+    // Greeting / one-off posts only need the Web API — not Socket Mode.
+    const result = await this.post(id, message);
     return {
       messageId: result.ts!,
-      target: { channel: "slack", targetId: result.channel ?? targetId },
+      target: { channel: "slack", id: result.channel ?? id },
       text: message,
     };
   }
@@ -299,15 +323,15 @@ export class SlackAdapter implements ChannelAdapter {
   }
 
   /** Test helper: inspect in-memory session threads. */
-  getSessionThread(targetId: string, sessionId: string): SlackSessionThread | undefined {
-    return this.sessions.get(sessionKey(targetId, sessionId));
+  getSessionThread(id: string, sessionId: string): SlackSessionThread | undefined {
+    return this.sessions.get(sessionKey(id, sessionId));
   }
 
   private async ensureSessionThread(
-    targetId: string,
+    id: string,
     session: SessionRef,
   ): Promise<SlackSessionThread> {
-    const key = sessionKey(targetId, session.id);
+    const key = sessionKey(id, session.id);
     const existing = this.sessions.get(key);
     if (existing) {
       return existing;
@@ -318,7 +342,7 @@ export class SlackAdapter implements ChannelAdapter {
       return inFlight;
     }
 
-    const create = this.openSessionThread(targetId, session, key);
+    const create = this.openSessionThread(id, session, key);
     this.sessionLocks.set(key, create);
     try {
       return await create;
@@ -328,7 +352,7 @@ export class SlackAdapter implements ChannelAdapter {
   }
 
   private async openSessionThread(
-    targetId: string,
+    id: string,
     session: SessionRef,
     key: string,
   ): Promise<SlackSessionThread> {
@@ -339,10 +363,10 @@ export class SlackAdapter implements ChannelAdapter {
 
     const label = sessionLabel(session);
     const opener = `Started working on ${label}`;
-    const result = await this.post(targetId, opener);
+    const result = await this.post(id, opener);
 
     const thread: SlackSessionThread = {
-      targetId,
+      id,
       sessionId: session.id,
       rootTs: result.ts!,
       label,
@@ -352,7 +376,7 @@ export class SlackAdapter implements ChannelAdapter {
   }
 
   private async post(
-    targetId: string,
+    id: string,
     text: string,
     threadTs?: string,
   ): Promise<{ ok?: boolean; ts?: string; channel?: string; error?: string }> {
@@ -361,7 +385,7 @@ export class SlackAdapter implements ChannelAdapter {
     let result;
     try {
       result = await web.chat.postMessage({
-        channel: targetId,
+        channel: id,
         text: formatHitlOutbound(text),
         ...(threadTs ? { thread_ts: threadTs } : {}),
       });
@@ -377,7 +401,7 @@ export class SlackAdapter implements ChannelAdapter {
       if (err === "channel_not_found" || err === "not_in_channel") {
         throw new HitlError(
           "TARGET_NOT_FOUND",
-          `Slack target "${targetId}" was not found or the bot is not a member.`,
+          `Slack target "${id}" was not found or the bot is not a member.`,
         );
       }
       throw new HitlError(
@@ -407,10 +431,17 @@ export class SlackAdapter implements ChannelAdapter {
     this.socket = socket;
 
     try {
-      await socket.start();
+      await withTimeout(
+        socket.start(),
+        SOCKET_START_TIMEOUT_MS,
+        "Slack Socket Mode did not connect in time. Needed for ask_human replies (notify_human uses Web API only). Check Socket Mode is enabled, the xapp- token has connections:write, and wss:// to Slack is not blocked.",
+      );
     } catch (error) {
       this.socket = undefined;
       this.connected = false;
+      if (error instanceof HitlError) {
+        throw error;
+      }
       throw new HitlError(
         "CONNECTION_FAILURE",
         `Slack Socket Mode failed to start: ${safeErrorMessage(error)}`,

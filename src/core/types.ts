@@ -8,11 +8,12 @@
 export type ChannelType = "fake" | "slack" | "whatsapp";
 
 /**
- * A communication destination. The meaning of `targetId` is adapter-owned.
+ * A communication destination. The meaning of `id` is adapter-owned
+ * (Slack channel id, WhatsApp JID, …).
  */
 export interface Target {
   channel: ChannelType;
-  targetId: string;
+  id: string;
 }
 
 /**
@@ -39,7 +40,8 @@ export interface SentMessage {
 
 export interface IncomingMessage {
   channel: ChannelType;
-  targetId: string;
+  /** Destination id (Slack channel, WhatsApp JID, …). */
+  id: string;
   messageId: string;
   /** Native reply/thread relationship when the provider exposes one. */
   replyToMessageId?: string;
@@ -73,6 +75,7 @@ export class HitlError extends Error {
 
 export type HitlErrorCode =
   | "NO_DEFAULT_TARGET"
+  | "UNKNOWN_TARGET_NAME"
   | "PROVIDER_NOT_CONFIGURED"
   | "PROVIDER_NOT_AUTHENTICATED"
   | "TARGET_NOT_FOUND"

@@ -32,13 +32,13 @@ export interface ChannelAdapter {
   listTargets(): Promise<ListedTarget[]>;
 
   sendMessage(
-    targetId: string,
+    id: string,
     message: string,
     options?: SendMessageOptions,
   ): Promise<SentMessage>;
 
   /** One-off send used by setup greeting. */
-  sendPlainMessage(targetId: string, message: string): Promise<SentMessage>;
+  sendPlainMessage(id: string, message: string): Promise<SentMessage>;
 
   onMessage(handler: MessageHandler): void;
 }

@@ -61,15 +61,15 @@ export interface WhatsAppAdapterOptions {
 }
 
 interface WhatsAppSessionThread {
-  targetId: string;
+  id: string;
   sessionId: string;
   rootMessageId: string;
   rootMessage: WhatsAppQuoteMessage;
   label: string;
 }
 
-function sessionKey(targetId: string, sessionId: string): string {
-  return `${targetId}::${sessionId}`;
+function sessionKey(id: string, sessionId: string): string {
+  return `${id}::${sessionId}`;
 }
 
 function sessionLabel(session: SessionRef): string {
@@ -368,16 +368,16 @@ export class WhatsAppAdapter implements ChannelAdapter {
       if (!chat.id || isIgnoredChatId(chat.id)) {
         continue;
       }
-      const targetId = normalizeWhatsAppChatJid(chat.id);
-      if (seen.has(targetId)) {
+      const id = normalizeWhatsAppChatJid(chat.id);
+      if (seen.has(id)) {
         continue;
       }
-      seen.add(targetId);
+      seen.add(id);
       targets.push({
         channel: "whatsapp",
-        targetId,
+        id,
         label: chatLabel(
-          { ...chat, id: targetId },
+          { ...chat, id: id },
           this.contacts,
           this.selfJid,
         ),
@@ -385,7 +385,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
     }
 
     targets.sort((a, b) =>
-      (a.label ?? a.targetId).localeCompare(b.label ?? b.targetId),
+      (a.label ?? a.id).localeCompare(b.label ?? b.id),
     );
     return targets;
   }
@@ -395,21 +395,21 @@ export class WhatsAppAdapter implements ChannelAdapter {
     if (!this.selfJid) {
       return undefined;
     }
-    const targetId = normalizeWhatsAppChatJid(this.selfJid);
-    const chat = this.chats.get(targetId) ??
+    const id = normalizeWhatsAppChatJid(this.selfJid);
+    const chat = this.chats.get(id) ??
       this.chats.get(this.selfJid) ?? {
-        id: targetId,
+        id: id,
         name: "Me (this account)",
       };
     return {
       channel: "whatsapp",
-      targetId,
-      label: chatLabel({ ...chat, id: targetId }, this.contacts, targetId),
+      id,
+      label: chatLabel({ ...chat, id: id }, this.contacts, id),
     };
   }
 
   async sendMessage(
-    targetId: string,
+    id: string,
     message: string,
     options?: SendMessageOptions,
   ): Promise<SentMessage> {
@@ -423,8 +423,8 @@ export class WhatsAppAdapter implements ChannelAdapter {
       );
     }
 
-    const thread = await this.ensureSessionThread(targetId, session);
-    const result = await this.post(targetId, message, thread.rootMessage);
+    const thread = await this.ensureSessionThread(id, session);
+    const result = await this.post(id, message, thread.rootMessage);
 
     const messageId = result.key?.id;
     if (!messageId) {
@@ -439,17 +439,17 @@ export class WhatsAppAdapter implements ChannelAdapter {
     return {
       messageId,
       correlationId: thread.rootMessageId,
-      target: { channel: "whatsapp", targetId },
+      target: { channel: "whatsapp", id },
       text: message,
     };
   }
 
   async sendPlainMessage(
-    targetId: string,
+    id: string,
     message: string,
   ): Promise<SentMessage> {
     await this.connect();
-    const result = await this.post(targetId, message);
+    const result = await this.post(id, message);
     const messageId = result.key?.id;
     if (!messageId) {
       throw new HitlError(
@@ -459,7 +459,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
     }
     return {
       messageId,
-      target: { channel: "whatsapp", targetId },
+      target: { channel: "whatsapp", id },
       text: message,
     };
   }
@@ -544,7 +544,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
     return {
       channel: "whatsapp",
-      targetId: info.id,
+      id: info.id,
       label: info.subject?.trim() || "Group chat",
     };
   }
@@ -555,38 +555,38 @@ export class WhatsAppAdapter implements ChannelAdapter {
    */
   async resolveTargetInfo(jid: string): Promise<ListedTarget> {
     await this.connect();
-    const targetId = normalizeWhatsAppChatJid(jid.trim());
-    if (!targetId.includes("@")) {
+    const id = normalizeWhatsAppChatJid(jid.trim());
+    if (!id.includes("@")) {
       throw new HitlError(
         "INVALID_TARGET",
         "Expected a full JID like 1203630...@g.us or 15551234567@s.whatsapp.net",
       );
     }
 
-    if (targetId.endsWith("@g.us")) {
-      const subject = await this.enrichGroupLabel(targetId);
+    if (id.endsWith("@g.us")) {
+      const subject = await this.enrichGroupLabel(id);
       if (subject) {
-        return { channel: "whatsapp", targetId, label: subject };
+        return { channel: "whatsapp", id, label: subject };
       }
     }
 
     const chat =
-      this.chats.get(targetId) ??
+      this.chats.get(id) ??
       this.chats.get(jid) ??
-      ({ id: targetId } satisfies WhatsAppChatInfo);
+      ({ id: id } satisfies WhatsAppChatInfo);
 
     const label = chatLabel(
-      { ...chat, id: targetId },
+      { ...chat, id: id },
       this.contacts,
       this.selfJid,
     );
 
     return {
       channel: "whatsapp",
-      targetId,
+      id,
       label:
-        !label || label === targetId
-          ? targetId.endsWith("@g.us")
+        !label || label === id
+          ? id.endsWith("@g.us")
             ? "Group chat"
             : "Chat"
           : label,
@@ -662,7 +662,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
             const target: ListedTarget = {
               channel: "whatsapp",
-              targetId: chatId,
+              id: chatId,
               label:
                 !label || label === chatId
                   ? chatId.endsWith("@g.us")
@@ -710,10 +710,10 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
   /** Test helper: inspect in-memory session threads. */
   getSessionThread(
-    targetId: string,
+    id: string,
     sessionId: string,
   ): WhatsAppSessionThread | undefined {
-    return this.sessions.get(sessionKey(targetId, sessionId));
+    return this.sessions.get(sessionKey(id, sessionId));
   }
 
   /** Test helper: seed chat discovery without Baileys history sync. */
@@ -735,10 +735,10 @@ export class WhatsAppAdapter implements ChannelAdapter {
   }
 
   private async ensureSessionThread(
-    targetId: string,
+    id: string,
     session: SessionRef,
   ): Promise<WhatsAppSessionThread> {
-    const key = sessionKey(targetId, session.id);
+    const key = sessionKey(id, session.id);
     const existing = this.sessions.get(key);
     if (existing) {
       return existing;
@@ -749,7 +749,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
       return inFlight;
     }
 
-    const create = this.openSessionThread(targetId, session, key);
+    const create = this.openSessionThread(id, session, key);
     this.sessionLocks.set(key, create);
     try {
       return await create;
@@ -759,7 +759,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
   }
 
   private async openSessionThread(
-    targetId: string,
+    id: string,
     session: SessionRef,
     key: string,
   ): Promise<WhatsAppSessionThread> {
@@ -770,7 +770,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
     const label = sessionLabel(session);
     const opener = `Started working on ${label}`;
-    const result = await this.post(targetId, opener);
+    const result = await this.post(id, opener);
 
     const rootMessageId = result.key?.id;
     if (!rootMessageId) {
@@ -782,7 +782,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
     const rootMessage: WhatsAppQuoteMessage = {
       key: {
-        remoteJid: targetId,
+        remoteJid: id,
         id: rootMessageId,
         fromMe: true,
       },
@@ -792,7 +792,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
     this.correlationRoots.set(rootMessageId, rootMessageId);
 
     const thread: WhatsAppSessionThread = {
-      targetId,
+      id,
       sessionId: session.id,
       rootMessageId,
       rootMessage,
@@ -803,13 +803,13 @@ export class WhatsAppAdapter implements ChannelAdapter {
   }
 
   private async post(
-    targetId: string,
+    id: string,
     text: string,
     quoted?: WhatsAppQuoteMessage,
   ): Promise<WhatsAppQuoteMessage> {
     const socket = await this.requireSocket();
     // Device-suffixed JIDs address a single linked device; normalize to the user chat.
-    const jid = normalizeWhatsAppChatJid(targetId);
+    const jid = normalizeWhatsAppChatJid(id);
 
     let result;
     try {
